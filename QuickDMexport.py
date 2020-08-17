@@ -53,9 +53,14 @@ class PanelQuickDMExportDelegate:
     In this case one should manually change the date in the Export Dir field.
     ======================================================================================
     Revisions:
-        
-    20200811:
-    DMH:  initial version
+    
+    20200818; DMH:
+        adding pop up dialogs for overwriting files/directories
+    20200817; DMH:  
+        implementing pathlib for OS indepedent directory and file manipulations
+        enabling and disabling export buttons based on re-editing editable fields
+    20200811; DMH:  
+        initial version
     """
     
     def __init__(self, api):
@@ -71,9 +76,9 @@ class PanelQuickDMExportDelegate:
         self.have_sub = False
         self.have_fov = False
         self.have_descr = False
+        self.all_good = False
         # keep track of export buttons here
         self.button_widgets_list = []
-
         # get current datetime
         self.now = datetime.datetime.now()
         
@@ -84,9 +89,16 @@ class PanelQuickDMExportDelegate:
     def create_panel_widget(self, ui, document_controller):
         self.ui = ui
         self.document_controller = document_controller
-        #initialise export dir field with empty string
-        self.expdir_string = ""
         
+        # list of export buttons (will be ordered in rows of 4 buttons)         
+        button_list = [
+                "HAADF", "MAADF", "BF", "ABF", 
+                "LAADF", "SI-Survey", "SI-During", "SI-After",
+                "SI-EELS", "EELS-sngl", "Ronchi"
+                ]
+        
+        #initialise export dir field with empty string
+        self.expdir_string = ""        
         # function to cosntruct the export directory string
         def get_export_dir_string():            
             #site based base directory for exports
@@ -118,8 +130,7 @@ class PanelQuickDMExportDelegate:
         #### create column widget
         column = ui.create_column_widget()
 
-
-        ### update export dir button row
+        ### create update export dir button row widget
         update_expdir_row = ui.create_row_widget()
         ## create button
         self.update_expdir_button = ui.create_push_button_widget(_("Set Exp Dir from Session Metadata"))
@@ -141,7 +152,7 @@ class PanelQuickDMExportDelegate:
         update_expdir_row.add_stretch             
 
 
-        ### editable export dir field row
+        ### create editable export dir field row widget
         expdir_row = ui.create_row_widget()
         self.expdir_field_edit = ui.create_line_edit_widget()
         def handle_expdir_field_changed(text):
@@ -155,7 +166,7 @@ class PanelQuickDMExportDelegate:
         expdir_row.add_spacing(2)
         update_expdir_row.add_stretch   
 
-        ### create label row
+        ### create label row widget
         label_row = ui.create_row_widget()
         ## define labels
         # properties parameters are not accepted here? edit_row.add(ui.create_label_widget("dummy", properties={"width": 100}))
@@ -179,27 +190,22 @@ class PanelQuickDMExportDelegate:
         ## define what happens when editable fields have changed                        
         def handle_no_changed(text):
             logging.info(text)
-            self.update_button_state(self.haadf_button, no=True)
             for button in self.button_widgets_list:                
-                self.update_button_state(button, no=True)
+                self.update_button_state(button, no=text)
             #fields_nr_sub.request_refocus()            
         def handle_sub_changed(text):            
             logging.info(text)
-            self.update_button_state(self.haadf_button, sub=True)
             for button in self.button_widgets_list:                
-                self.update_button_state(button, sub=True)            
-            #fields_fov_edit.request_refocus()                       
+                self.update_button_state(button, sub=text)              
+            #fields_fov_edit.request_refocus()             
         def handle_fov_changed(text):
             logging.info(text)
-            self.update_button_state(self.haadf_button, fov=True)
             for button in self.button_widgets_list:                
-                self.update_button_state(button, fov=True)            
+                self.update_button_state(button, fov=text)            
             #fields_descr_edit.request_refocus()
         def handle_descr_changed(text):
-            logging.info(text)
-            self.update_button_state(self.haadf_button, descr=True)
             for button in self.button_widgets_list:                
-                self.update_button_state(button, descr=True)            
+                self.update_button_state(button, descr=text)            
             #fields_descr_edit.request_refocus()        
         ## define editing_finished event
         #"calling" handle functions w/o () only passes the function object (it does not invoke the function)
@@ -220,18 +226,13 @@ class PanelQuickDMExportDelegate:
        
 
         ### create export button rows (contained in a column widget)
-        #!!! this could be read from persistent data to allow user to configure buttons via config file        
-        button_list = [
-                "HAADF", "MAADF", "BF", "ABF", 
-                "LAADF", "SI-Survey", "SI-During", "SI-After",
-                "SI-EELS", "EELS-sngl", "Ronchi"
-                ]
         self.button_column = ui.create_column_widget()
-        # add button rows with 4 buttons from button_list each
-        for index in range(divide_round_up(len(button_list),4)):
-            logging.info(str(index))
-            line = self.create_button_line(index, button_list)
-            self.button_column.add(line)
+        # add button rows with 4 buttons each, taking buttons from button_list
+        # line_no counts up to how many rows are required 
+        for line_no in range(divide_round_up(len(button_list),4)):
+            logging.info(str(line_no))
+            button_row = self.create_button_line(line_no, button_list)
+            self.button_column.add(button_row)
             
         ### add the row widgets to the column widget
         column.add_spacing(8)
@@ -253,69 +254,84 @@ class PanelQuickDMExportDelegate:
         return column
 
     def update_button_state(self, button, **kwargs):
- 
-        if ('no' in kwargs):
+        """ enables/disables export button widget depending on whether all required editable fields currently have a value
+        """
+
+        # update current status of each editable field        
+        if 'no' in kwargs and kwargs['no'] != "":
             self.have_no = True
-        elif ('sub' in kwargs):
+        elif 'no' in kwargs and kwargs['no'] == "":
+            self.have_no = False
+        if 'sub' in kwargs and kwargs['sub'] != "":
             self.have_sub = True
-        elif ('fov' in kwargs):
+        elif 'sub' in kwargs and kwargs['sub'] == "":
+            self.have_sub = False
+        if 'fov' in kwargs and kwargs['fov'] != "":
             self.have_fov =  True
-        elif ('descr' in kwargs):
+        elif 'fov' in kwargs and kwargs['fov'] == "":
+            self.have_fov = False
+        if 'descr' in kwargs and kwargs['descr'] != "":
             self.have_descr = True    
-        
-        # No, FOV and Description are required fields
+        elif 'descr' in kwargs and kwargs['descr'] == "":
+            self.have_descr = False
+            
+        # only if related booleans of required fields (No, FOV and Description) are all True can we set all good to go
         if self.have_no and self.have_fov and self.have_descr:
-            logging.info("all fields defined")
-            def update():
+            self.all_good = True
+        else:
+            self.all_good = False
+            
+        def update():
+            if self.all_good == True:
                 button._widget.enabled = True
-                logging.info("have enabled button")
-            # that actuale does the update
-            self.__api.queue_task(update)  
+                logging.info("have enabled button")        
+            else:
+                button._widget.enabled = False
+                logging.info("have disabled button")        
+                                  
+        self.__api.queue_task(update)
  
     
     # we need several instances of this
     def create_button_line(self, index, button_list):
-        logging.info(str(index))
-        logging.info(str(button_list))
-        logging.info("%s %s %s", (4*index)+1, (4*index)+2, (4*index)+3 )
-        
+        """ Creates a row of up to 4 buttons inside a column.
+            Parameters: index = current line_no of export button rows
+                        button_list = list of strings with button names
+        """
 
-        row = self.ui.create_row_widget()
         column = self.ui.create_column_widget()       
-
+        row = self.ui.create_row_widget()
+        
         def export_button_clicked(button_list_index):
-            logging.info("button_clicked index: %s", button_list_index)
-            writer = self.writer
-            # button is disabled until all required (No, FOV, Descr) editable fields are filled in 
+            """ Renames selected DISPLAY item and saves as DM to the selected export directory.
+                All export buttons are disabled until all required fields (No, FOV, descripton) are filled in.
+                Parameters: button_list_index = selected export button string
+            """
             #!!! find out whether by passing "ui" to the function we can replace the loooong __api.application.... string with "ui"        
+            writer = self.writer
             prefix = get_prefix_string(self.fields_no_edit.text)
             postfix = get_postfix_string(self.fields_sub_edit.text, self.fields_fov_edit.text, self.fields_descr_edit.text)
-            
-            ## apply new title to selected DISPLAY item
-            # Demie wants selected item to be display item not data item in the panel
             item = self.__api.application.document_controllers[0]._document_controller.selected_display_item
-            item.title = prefix + str(button_list[button_list_index]) + postfix
-            ## save file (should we warn if already exists?)
-            #directory = self.ui.get_persistent_string("export_directory", self.ui.get_document_location())
-            directory = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('export_directory')
-            logging.info("getpersistentdir %s", directory)
-            filename = item.title
-            extension = writer.extensions[0]
-            path = os.path.join(directory, "{0}.{1}".format(filename, extension))
-            logging.info("path %s", path)
-            if not os.path.isdir(directory):
-                os.makedirs(directory)
+            item.title = prefix + str(button_list[button_list_index]) + postfix        
+            directory_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('export_directory')
+            logging.info("getpersistentdir %s", directory_string)
+            filename = "{0}.{1}".format(item.title, writer.extensions[0])
+            export_path = pathlib.Path(directory_string).joinpath(filename)
+            logging.info("path %s", export_path)
+            if not pathlib.Path.is_dir(export_path.parent):       #path.parent strips filename from path
+                export_path.parent.mkdir(parents=True)            # mkdir -p
                 logging.info("path did not exist")
             else:
                 logging.info("Directory already exists")
                 # launch popup dialog
-            if not os.path.isfile(path):
-                ImportExportManager.ImportExportManager().write_display_item_with_writer(self.__api.application.document_controllers[0]._document_controller.ui, writer, item, path)
+            if not pathlib.Path.is_file(export_path):
+                ImportExportManager.ImportExportManager().write_display_item_with_writer(self.__api.application.document_controllers[0]._document_controller.ui, writer, item, str(export_path))
             else:
                 # launch popup dialog
                 logging.info("could not export - file exists")      
 
-        # don't know how many buttons there are, so possible to have not enough to fill a row
+        # make buttons
+        # don't know how many buttons there are, so it's possible to have not enough to fill a row of 4
         try:                
             self.button1 = self.ui.create_push_button_widget(_(str(button_list[4*index])))
             row.add(self.button1)
