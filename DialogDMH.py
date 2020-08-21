@@ -73,21 +73,19 @@ class DialogExampleDelegate:
                 if include_cancel:
                     self.add_button('Cancel', on_cancel_clicked)
 
-                column = self.ui.create_column_widget()
-                row = self.ui.create_row_widget()
-                label = self.ui.create_label_widget('This is a modeless dialog.')
+#                column = self.ui.create_column_widget()
+#                row = self.ui.create_row_widget()
+#                label = self.ui.create_label_widget('This is a modeless dialog.')
+#                row.add_spacing(10)
+#                row.add(label)
+#                row.add_spacing(10)
+#                row.add_stretch()
+#                column.add_spacing(10)
+#                column.add(row)
+#                column.add_spacing(10)
+#                column.add_stretch()
 
-                row.add_spacing(10)
-                row.add(label)
-                row.add_spacing(10)
-                row.add_stretch()
-
-                column.add_spacing(10)
-                column.add(row)
-                column.add_spacing(10)
-                column.add_stretch()
-
-                self.content.add(column)
+#                self.content.add(column)
 
             def about_to_close(self, geometry: str, state: str) -> None:
                 """
