@@ -23,8 +23,9 @@ class DialogExampleDelegate:
         self.panel_position = "right"
 
         self.__action_dialog_open = False
+        self.text = "HUHU"
 
-    def show_action_dialog(self):
+    def show_action_dialog(self, title_string):
         class ExampleDialog(Dialog.ActionDialog):
             """
             Create a modeless dialog that always stays on top of the UI by default (can be controlled with the
@@ -73,19 +74,20 @@ class DialogExampleDelegate:
                 if include_cancel:
                     self.add_button('Cancel', on_cancel_clicked)
 
-#                column = self.ui.create_column_widget()
-#                row = self.ui.create_row_widget()
-#                label = self.ui.create_label_widget('This is a modeless dialog.')
-#                row.add_spacing(10)
-#                row.add(label)
-#                row.add_spacing(10)
-#                row.add_stretch()
-#                column.add_spacing(10)
-#                column.add(row)
-#                column.add_spacing(10)
-#                column.add_stretch()
+                column = self.ui.create_column_widget()
+                row = self.ui.create_row_widget()
+                #label = self.ui.create_label_widget('This is a modeless dialog.')
+                label = self.ui.create_label_widget(title_string)
+                row.add_spacing(10)
+                row.add(label)
+                row.add_spacing(10)
+                row.add_stretch()
+                column.add_spacing(10)
+                column.add(row)
+                column.add_spacing(10)
+                column.add_stretch()
 
-#                self.content.add(column)
+                self.content.add(column)
 
             def about_to_close(self, geometry: str, state: str) -> None:
                 """
@@ -109,11 +111,15 @@ class DialogExampleDelegate:
             ExampleDialog(dc.ui, on_accept=report_dialog_closed, on_reject=report_dialog_closed).show()
 
     def create_panel_widget(self, ui, document_controller):
+        
         column = ui.create_column_widget()
 
         button_row = ui.create_row_widget()
         button_widget = ui.create_push_button_widget(_('Show example dialog'))
-        button_widget.on_clicked = self.show_action_dialog
+        def handle_show_action_dialog_clicked():
+            title_string = self.text
+            self.show_action_dialog(title_string)
+        button_widget.on_clicked = handle_show_action_dialog_clicked
 
         button_row.add_spacing(8)
         button_row.add(button_widget)

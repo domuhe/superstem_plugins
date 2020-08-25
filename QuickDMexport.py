@@ -3,11 +3,13 @@ import gettext
 import logging
 import threading
 import datetime
+import os
 import pathlib
 import functools
 import typing
 import asyncio
 import pkgutil
+import json
 
 # local libraries
 from nion.swift import Panel
@@ -45,6 +47,48 @@ def get_postfix_string(sub_field_string, fov_field_string, descr_field_string):
     return postfix_string
 
 
+def read_config_file(config_file: pathlib.Path):
+    conf_file = config_file
+    sstem_settings = {}
+    logging.info("Reading SuperSTEM config file %s", conf_file)
+
+    try:  # do nothing unless config file exists and is not empty
+        if conf_file.is_file() and conf_file.stat().st_size != 0:
+            with open(conf_file, "r") as f:
+                sstem_settings = json.load(f)
+                if sstem_settings == {}:
+                    logging.info("WARNING - SuperSTEM config file %s empty", conf_file)
+                    logging.info("        - Please edit and enter key/value pair for export_base_directory")
+                else:
+                    logging.info("- SuperSTEM settings are %s", sstem_settings)
+        else:
+            logging.info("WARNING - SuperSTEM config file %s NOT FOUND", conf_file)
+            logging.info("        - Please create and enter key/value pair for export_base_directory")
+    except Exception as e:
+        logging.info("- Exception read_config_file %s", e)
+
+    return sstem_settings
+
+
+def get_sstem_settings(config_file):
+    sstem_settings = read_config_file(config_file)
+    return sstem_settings
+
+
+def write_config_file(config_file: pathlib.Path, sstem_settings):
+    conf_file = config_file
+
+    try:
+        if conf_file.is_file():
+            with open(conf_file, "w") as f:
+                logging.info("UPDATING SuperSTEM config file %s", conf_file)
+                json.dump(sstem_settings, f, indent=4)
+        else:
+            logging.info("WARNING - SuperSTEM config file NOT FOUND")
+    except Exception as e:
+         logging.info("- Exception write_config_file %s", e)
+
+
 class PanelQuickDMExportDelegate:
     """
     This panel plugin allows to set the persistent export directory from the
@@ -58,6 +102,10 @@ class PanelQuickDMExportDelegate:
     ==========================================================================
     Revisions:
 
+    20200825; DMH:
+        added Initialise New Library button and minimal functionality
+    20200821; DMH:
+        added SuperSTEM's own JSON config file, reading/writing thereof
     20200818; DMH:
         adjusted style closer to pep8
         adding pop up warning dialog in case filename already exists
@@ -78,6 +126,7 @@ class PanelQuickDMExportDelegate:
         self.api = api
 
         self.__action_dialog_open = False
+        self.__library_dialog_open = False
         # initial edit status of editable fields
         self.have_no = False
         self.have_sub = False
@@ -92,6 +141,352 @@ class PanelQuickDMExportDelegate:
         # we only export to DM
         self.io_handler_id = "dm-io-handler"
         self.writer = ImportExportManager.ImportExportManager().get_writer_by_id(self.io_handler_id)
+
+        # SuperSTEM config file
+        self.config_file = api.application.configuration_location / pathlib.Path("superstem_customisation.json")
+        logging.info("Using %s for SuperSTEM customisations", self.config_file)
+        #self.LibraryDialog = self.LibraryDialog.self
+        #elf.sstem_settings = read_config_file(self.config_file)
+        self.sstem_settings = get_sstem_settings(self.config_file)
+        #self.expdir_base_string = get_sstem_settings(self.config_file).get('export_base_directory')
+        self.expdir_base_string = self.sstem_settings.get('export_base_directory')
+
+
+    def show_init_library_dialog(self):
+        get_base_library_string_fn = self.get_base_library_string
+        
+        class InitLibraryDialog(Dialog.ActionDialog):
+
+            def __init__(self, ui: UserInterface, *,
+                         on_accept: typing.Optional[typing.Callable[[], None]]=None,
+                         on_reject: typing.Optional[typing.Callable[[], None]]=None,
+                         include_ok: bool=True,
+                         include_cancel: bool=True,
+                         window_style: typing.Optional[str]=None):
+            #def __init__(self, ui, app):
+                #super().__init__(ui, title=_("Initialise Library"), app=app, persistent_id="init_library_dialog")
+                super().__init__(ui, window_style=window_style)
+                
+                # self.directory = self.ui.get_persistent_string("library_directory", self.ui.get_document_location())
+                self.directory = get_base_library_string_fn()
+                logging.info("library_base_string %s", self.directory)
+
+                #DMH 200727
+                library_base_name = datetime.datetime.now().strftime("%Y%m%d") + "_OPR_Snnn" + "_" +  _("NSL") 
+                library_base_index = 0
+                library_base_index_str = ""
+                while os.path.exists(os.path.join(self.directory, library_base_name + library_base_index_str)):
+                    library_base_index += 1
+                    library_base_index_str = " " + str(library_base_index)
+
+                self.library_name = library_base_name + library_base_index_str
+
+                def handle_new():
+                    self.library_name = self.__library_name_field.text
+                    workspace_dir = os.path.join(self.directory, self.library_name)
+                    Cache.db_make_directory_if_needed(workspace_dir)
+                    path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
+                    if not os.path.exists(path):
+                        with open(path, "w") as fp:
+                            json.dump({}, fp)
+                    if os.path.exists(path):
+                        app.switch_library(workspace_dir)
+                        return True
+                    return False
+
+                def handle_new_and_close():
+                    handle_new()
+                    self.request_close()
+                    return False
+
+                column = self.ui.create_column_widget()
+
+                directory_header_row = self.ui.create_row_widget()
+                directory_header_row.add_spacing(13)
+                directory_header_row.add(self.ui.create_label_widget(_("Libraries Folder: "), properties={"font": "bold"}))
+                directory_header_row.add_stretch()
+                directory_header_row.add_spacing(13)
+
+                show_directory_row = self.ui.create_row_widget()
+                show_directory_row.add_spacing(26)
+                directory_label = self.ui.create_label_widget(self.directory)
+                show_directory_row.add(directory_label)
+                show_directory_row.add_stretch()
+                show_directory_row.add_spacing(13)
+
+                choose_directory_row = self.ui.create_row_widget()
+                choose_directory_row.add_spacing(26)
+                choose_directory_button = self.ui.create_push_button_widget(_("Choose..."))
+                choose_directory_row.add(choose_directory_button)
+                choose_directory_row.add_stretch()
+                choose_directory_row.add_spacing(13)
+
+                library_name_header_row = self.ui.create_row_widget()
+                library_name_header_row.add_spacing(13)
+                library_name_header_row.add(self.ui.create_label_widget(_("Library Name: "), properties={"font": "bold"}))
+                library_name_header_row.add_stretch()
+                library_name_header_row.add_spacing(13)
+
+                library_name_row = self.ui.create_row_widget()
+                library_name_row.add_spacing(26)
+                library_name_field = self.ui.create_line_edit_widget(properties={"width": 400})
+                library_name_field.text = self.library_name
+                library_name_field.on_return_pressed = handle_new_and_close
+                library_name_field.on_escape_pressed = self.request_close
+                library_name_row.add(library_name_field)
+                library_name_row.add_stretch()
+                library_name_row.add_spacing(13)
+
+                column.add_spacing(12)
+                column.add(directory_header_row)
+                column.add_spacing(8)
+                column.add(show_directory_row)
+                column.add_spacing(8)
+                column.add(choose_directory_row)
+                column.add_spacing(16)
+                column.add(library_name_header_row)
+                column.add_spacing(8)
+                column.add(library_name_row)
+                column.add_stretch()
+                column.add_spacing(16)
+
+                def choose() -> None:
+                    existing_directory, directory = self.ui.get_existing_directory_dialog(_("Choose Library Directory"), self.directory)
+                    if existing_directory:
+                        self.directory = existing_directory
+                        directory_label.text = self.directory
+                        self.ui.set_persistent_string("library_directory", self.directory)
+
+                choose_directory_button.on_clicked = choose
+
+                self.add_button(_("Cancel"), lambda: True)
+                self.add_button(_("Create Library"), handle_new)
+
+                self.content.add(column)
+
+                self.__library_name_field = library_name_field
+
+            def show(self):
+                super().show()
+                self.__library_name_field.focused = True
+
+        new_library_dialog = InitLibraryDialog(self.ui)
+        new_library_dialog.show()
+
+    def get_base_library_string(self):
+        """ Reads the persistent export base directory from config file,
+            falls back to /tmp/SSTEMData if it doesn't exist, and then
+            constructs export directory path based on current year, date,
+            microscopist, sampleID, sample description (i.e. sample_area).
+            Returns the export directory path as string.
+        """
+        # site based base directory for exports as configurd in SuperSTEM config file
+        logging.info("Called get_base_library_string")
+        self.base_dir_string = get_sstem_settings(self.config_file).get('export_base_directory')            
+    
+        # fall back to /tmp/SSTEMData/<year> or C:\tmp\SSTEMData\<year>
+        if self.base_dir_string is None:
+            base_dir_path = pathlib.Path('/tmp/SSTEMData/')
+        else:
+            base_dir_path = pathlib.Path(self.base_dir_string)
+        base_date_string = "_".join([str(self.now.year),
+                                       str(self.now.month),
+                                       str(self.now.day)])
+        base_session_string = "_".join([
+            str(self.__api.library.get_library_value("stem.session.microscopist")), 
+            str(self.__api.library.get_library_value("stem.session.sample")),
+            str(self.__api.library.get_library_value("stem.session.sample_area"))
+        ])
+        # pathlib "/" method to ;contruct export dir path:
+        base_library_path = base_dir_path.joinpath(
+                str(self.now.year),
+                base_date_string + "_" + base_session_string)
+        #logging.info(" expdir_path %s", expdir_path)
+        return str(base_library_path)
+        
+    def show_library_dialog(self, title_string, have_ok=True, have_cancel=True):
+
+        # this puts the get_base_library_string in the scope of the class LibraryDialog:      
+        get_base_library_string_fn = self.get_base_library_string
+    
+        class LibraryDialog(Dialog.ActionDialog):
+            """
+            Create a modeless dialog that always stays on top of the UI 
+            by default (can be controlled with the parameter 'window_style').
+
+            Parameters:
+            -----------
+            ui : An instance of nion.ui.UserInterface, required.
+            on_accept : callable, optional.
+                This method will be called when the user clicks 'OK'
+            on_reject : callable, optional.
+                This method will be called when the user clicks 'Cancel' or the 'X'-button
+            include_ok : bool, optional
+                Whether to include the 'OK' button.
+            include_cancel : bool, optional
+                Whether to include the 'Cancel' button.
+            window_style : str, optional
+                Pass in 'dialog' here if you want the Dialog to move into the background when clicking outside
+                of it. The default value 'tool' will cause it to always stay on top of Swift.
+            """
+            def __init__(self, ui: UserInterface, *,
+                         on_accept: typing.Optional[typing.Callable[[], None]]=None,
+                         on_reject: typing.Optional[typing.Callable[[], None]]=None,
+                         include_ok: bool=have_ok,
+                         include_cancel: bool=have_cancel,
+                         window_style: typing.Optional[str]=None):
+
+                super().__init__(ui, window_style=window_style)
+                logging.info("Calling LibraryDialog")
+                self.on_accept = on_accept
+                self.on_reject = on_reject
+                self.directory = get_base_library_string_fn()
+                logging.info("library_base_string %s", self.directory)
+
+                library_base_name = datetime.datetime.now().strftime("%Y%m%d") + "_OPR_Snnn" + "_" +  _("NSL") 
+                library_base_index = 0
+                library_base_index_str = ""
+                while os.path.exists(os.path.join(self.directory, library_base_name + library_base_index_str)):
+                    library_base_index += 1
+                    library_base_index_str = " " + str(library_base_index)
+
+                self.library_name = library_base_name + library_base_index_str
+                
+                def handle_new():
+                    self.library_name = self.__library_name_field.text
+                    workspace_dir = os.path.join(self.directory, self.library_name)
+                    Cache.db_make_directory_if_needed(workspace_dir)
+                    path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
+                    if not os.path.exists(path):
+                        with open(path, "w") as fp:
+                            json.dump({}, fp)
+                    if os.path.exists(path):
+                        app.switch_library(workspace_dir)
+                        return True
+                    return False
+
+                def handle_new_and_close():
+                    handle_new()
+                    self.request_close()
+                    return False
+                
+                column = self.ui.create_column_widget()
+                row = self.ui.create_row_widget()
+                label = self.ui.create_label_widget(title_string)
+
+                directory_header_row = self.ui.create_row_widget()
+                directory_header_row.add_spacing(13)
+                directory_header_row.add(self.ui.create_label_widget(_("Libraries Folder: "), properties={"font": "bold"}))
+                directory_header_row.add_stretch()
+                directory_header_row.add_spacing(13)
+
+                show_directory_row = self.ui.create_row_widget()
+                show_directory_row.add_spacing(26)
+                directory_label = self.ui.create_label_widget(self.directory)
+                show_directory_row.add(directory_label)
+                show_directory_row.add_stretch()
+                show_directory_row.add_spacing(13)
+
+                choose_directory_row = self.ui.create_row_widget()
+                choose_directory_row.add_spacing(26)
+                choose_directory_button = self.ui.create_push_button_widget(_("Choose..."))
+                choose_directory_row.add(choose_directory_button)
+                choose_directory_row.add_stretch()
+                choose_directory_row.add_spacing(13)
+
+                library_name_header_row = self.ui.create_row_widget()
+                library_name_header_row.add_spacing(13)
+                library_name_header_row.add(self.ui.create_label_widget(_("Library Name: "), properties={"font": "bold"}))
+                library_name_header_row.add_stretch()
+                library_name_header_row.add_spacing(13)
+
+                library_name_row = self.ui.create_row_widget()
+                library_name_row.add_spacing(26)
+                library_name_field = self.ui.create_line_edit_widget(properties={"width": 400})
+                library_name_field.text = self.library_name
+                library_name_field.on_return_pressed = handle_new_and_close
+                library_name_field.on_escape_pressed = self.request_close
+                library_name_row.add(library_name_field)
+                library_name_row.add_stretch()
+                library_name_row.add_spacing(13)
+
+                row.add_spacing(10)
+                row.add(label)
+                row.add_spacing(10)
+                row.add_stretch()
+
+                column.add_spacing(12)
+                column.add(directory_header_row)
+                column.add_spacing(8)
+                column.add(show_directory_row)
+                column.add_spacing(8)
+                column.add(choose_directory_row)
+                column.add_spacing(16)
+                column.add(library_name_header_row)
+                column.add_spacing(8)
+                column.add(library_name_row)
+                column.add_stretch()
+                column.add_spacing(16)
+                
+                column.add_spacing(10)
+                column.add(row)
+                column.add_spacing(10)
+                column.add_stretch()
+
+                def choose() -> None:
+                    existing_directory, directory = self.ui.get_existing_directory_dialog(_("Choose Library Directory"), self.directory)
+                    if existing_directory:
+                        self.directory = existing_directory
+                        directory_label.text = self.directory
+                        self.ui.set_persistent_string("library_directory", self.directory)
+
+                choose_directory_button.on_clicked = choose
+
+                def on_cancel_clicked():
+                    if self.on_reject:
+                        self.on_reject()
+                    # Return 'True' to tell Swift to close the Dialog
+                    return True
+                if include_cancel:
+                    self.add_button('Cancel', on_cancel_clicked)
+
+                def on_ok_clicked():
+                    if self.on_accept:
+                        self.on_accept()
+                    # Return 'True' to tell Swift to close the Dialog
+                    return True
+                if include_ok:
+                    self.add_button('OK', on_ok_clicked)
+                    
+                self.add_button(_("Cancel"), lambda: True)  # short way to create cancel button and action
+                self.add_button(_("Create Library"), handle_new)
+
+                self.content.add(column)
+
+                self.__library_name_field = library_name_field
+                
+
+            def about_to_close(self, geometry: str, state: str) -> None:
+                """
+                Required to properly close the Dialog.
+                """
+                if self.on_reject:
+                    self.on_reject()
+                super().about_to_close(geometry, state)
+
+        # We track open dialogs to ensure that only one dialog can be open at a time
+        if not self.__library_dialog_open:
+            self.__library_dialog_open = True
+            dc = self.__api.application.document_controllers[0]._document_controller
+            # This function will inform the main panel that the dialog has been closed, so that it will allow
+            # opening a new one
+            def report_dialog_closed():
+                self.__library_dialog_open = False
+            # We pass in `report_dialog_closed` so that it gets called when the dialog is closed.
+            # If you want to invoke different actions when the user clicks 'OK' and 'Canclel', you can of course pass
+            # in two different functions for `on_accept` and `on_reject`.
+            LibraryDialog(dc.ui, on_accept=report_dialog_closed, on_reject=report_dialog_closed).show()
+
 
     def show_action_dialog(self, title_string, have_ok=True, have_cancel=True):
         class WarningDialog(Dialog.ActionDialog):
@@ -193,7 +588,7 @@ class PanelQuickDMExportDelegate:
         # initialise export dir field with empty string
         self.expdir_string = ""
 
-        # function to cosntruct the export directory string
+        # function to construct the export directory string
         def get_export_dir_string():
             """ Reads the persistent export base directory from config file,
                 falls back to /tmp/SSTEMData if it doesn't exist, and then
@@ -201,13 +596,14 @@ class PanelQuickDMExportDelegate:
                 microscopist, sampleID, sample description (i.e. sample_area).
                 Returns the export directory path as string.
             """
-            # site based base directory for exports
-            expdir_base_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('export_base_directory')
-            # fall back to /tmp/SSTEMData/<year> or C:/tmp/SSTEMData/<year>
-            if expdir_base_string is None:
+            # site based base directory for exports as configurd in SuperSTEM config file
+            self.expdir_base_string = get_sstem_settings(self.config_file).get('export_base_directory')            
+
+            # fall back to /tmp/SSTEMData/<year> or C:\tmp\SSTEMData\<year>
+            if self.expdir_base_string is None:
                 expdir_base_path = pathlib.Path('/tmp/SSTEMData/')
             else:
-                expdir_base_path = pathlib.Path(expdir_base_string)
+                expdir_base_path = pathlib.Path(self.expdir_base_string)
             expdir_date_string = "_".join([str(self.now.year),
                                            str(self.now.month),
                                            str(self.now.day)])
@@ -218,20 +614,32 @@ class PanelQuickDMExportDelegate:
             ])
             # pathlib "/" method to ;contruct export dir path:
             expdir_path = expdir_base_path.joinpath(
-                    str(self.now.year), "doro",
+                    str(self.now.year),
                     expdir_date_string + "_" + expdir_session_string)
+            #logging.info(" expdir_path %s", expdir_path)
             return str(expdir_path)
 
         def write_persistent_vars(self):
             """ Writes export base directory path, export directory path and
-                chosen export format to config file (persistent data).
+                chosen export format to config files (superstem and Nion persistent data).
             """
-            self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_base_directory', expdir_base_string) 
-            self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_directory', expdir_string)                                                
+            write_config_file(self.config_file, self.sstem_settings)
+            self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_directory', self.expdir_string)                                                
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_filter', 'DigitalMicrograph Files files (*.dm3 *.dm4)')
 
         # === create main column widget
         column = ui.create_column_widget()
+        
+        # == create initialise new library button row
+        new_library_button_row = ui.create_row_widget()
+        self.new_library_button = ui.create_push_button_widget(_("Initialise New Library"))
+        new_library_button_row.add(self.new_library_button)
+        def new_library_button_clicked():
+            #self.show_init_library_dialog()
+            self.show_library_dialog("New Library", True, True)
+            #init_library_dialog = InitLibraryDialog(self.ui, self)
+            #init_library_dialog.show()
+        self.new_library_button.on_clicked = new_library_button_clicked
 
         # == create update export dir button row widget
         update_expdir_row = ui.create_row_widget()
@@ -347,6 +755,7 @@ class PanelQuickDMExportDelegate:
 
         # == add the row widgets to the column widget
         column.add_spacing(8)
+        column.add(new_library_button_row)
         column.add(update_expdir_row)
         column.add_spacing(3)
         column.add(expdir_row)
@@ -366,7 +775,7 @@ class PanelQuickDMExportDelegate:
 
     def update_button_state(self, button, **kwargs):
         """ This gets called for each editable field. It updates the relevant
-            status boolean based on text in the field, and then overall
+            status boolean based on text in the field, and then the overall
             status boolean. Then enables/disables export button widget
             depending on the overall status boolean.
             -----------
