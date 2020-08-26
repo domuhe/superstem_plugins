@@ -102,6 +102,8 @@ class PanelQuickDMExportDelegate:
     ==========================================================================
     Revisions:
 
+    20200826; DMH:
+        added width property to widgets
     20200825; DMH:
         added Initialise New Library button and minimal functionality
     20200821; DMH:
@@ -610,14 +612,20 @@ class PanelQuickDMExportDelegate:
         label_row = ui.create_row_widget()
         # define labels
         # properties parameters are not accepted here !?:
-        # edit_row.add(ui.create_label_widget("dummy", properties={"width":100}))
-        label_row.add(ui.create_label_widget(_("No")))
+        self.label_no = ui.create_label_widget(_("No"))
+        self.label_sub = ui.create_label_widget(_("Sub"))
+        self.label_fov = ui.create_label_widget(_("FOV"))
+        self.label_descr = ui.create_label_widget(_("Description"))
+        self.label_no._widget.set_property("width", 40)
+        self.label_sub._widget.set_property("width", 40)
+        self.label_fov._widget.set_property("width", 40)
+        label_row.add(self.label_no)        
         label_row.add_spacing(1)
-        label_row.add(ui.create_label_widget(_(" Sub")))
+        label_row.add(self.label_sub)
         label_row.add_spacing(1)
-        label_row.add(ui.create_label_widget(_(" FOV")))
+        label_row.add(self.label_fov)
         label_row.add_spacing(1)
-        label_row.add(ui.create_label_widget(_(" Description")))
+        label_row.add(self.label_descr)
         label_row.add_spacing(2)
 
         # == create editable fields row widget
@@ -627,7 +635,9 @@ class PanelQuickDMExportDelegate:
         self.fields_sub_edit = ui.create_line_edit_widget()
         self.fields_fov_edit = ui.create_line_edit_widget()
         self.fields_descr_edit = ui.create_line_edit_widget()
-
+        self.fields_no_edit._widget.set_property("width", 40)
+        self.fields_sub_edit._widget.set_property("width", 40)
+        self.fields_fov_edit._widget.set_property("width", 40)
         def handle_no_changed(text):
             """ calls the update button state function for each export button
                 and passes the current text in the No field
