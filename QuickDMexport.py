@@ -327,10 +327,11 @@ class PanelQuickDMExportDelegate:
                            #make_lib_button.enabled = True
                            # Create create_new_library button only the first time that all fields are filled
                            # (can't find a way to disable/enable button)
-                           if self._counter == 1:
-                               self.add_button(_("Create New Library"), handle_new)
+                           #if self._counter == 1:
+
                            # update library name in label widget
                            library_name_label.text = library_name.replace(" ", "_")
+                           library_name_field.text = library_name.replace(" ", "_")
                            #
                            self.__library_name = library_name.replace(" ", "_")
                        else:
@@ -374,9 +375,11 @@ class PanelQuickDMExportDelegate:
                 show_lib_name_row.add_spacing(13)
                 header_label = self.ui.create_label_widget("Library Name: ")
                 library_name_label = self.ui.create_label_widget("")
+                library_name_field = self.ui.create_line_edit_widget(properties={"width": 300, "stylesheet": "font: italic; color: gray"})
+                library_name_field.editable = False
                 show_lib_name_row.add(header_label)
-                show_lib_name_row.add_spacing(28)
-                show_lib_name_row.add(library_name_label)
+                show_lib_name_row.add_spacing(26)
+                show_lib_name_row.add(library_name_field)
                 show_lib_name_row.add_stretch()
                 show_lib_name_row.add_spacing(13)
 
@@ -384,8 +387,8 @@ class PanelQuickDMExportDelegate:
                 show_data_base_dir_row = self.ui.create_row_widget()
                 show_data_base_dir_row.add_spacing(13)
                 show_data_base_dir_row.add(self.ui.create_label_widget(_("Data Base Folder: "), properties={"font": "bold"}))
-                show_data_base_dir_row.add_spacing(10)
-                show_data_base_dir_row.add(self.ui.create_label_widget(get_data_base_dir_with_date(config_file)))
+                show_data_base_dir_row.add_spacing(5)
+                show_data_base_dir_row.add(self.ui.create_label_widget(get_data_base_dir_with_date(config_file),properties={"stylesheet": "font: italic; color: gray"}))
                 show_data_base_dir_row.add_stretch()
                 show_data_base_dir_row.add_spacing(13)
 
@@ -408,26 +411,23 @@ class PanelQuickDMExportDelegate:
 
                 choose_directory_button.on_clicked = choose
 
-                # library_name_header_row = self.ui.create_row_widget()
-                # library_name_header_row.add_spacing(13)
-                # library_name_header_row.add(self.ui.create_label_widget(_("Library Name: "), properties={"font": "bold"}))
-                # library_name_header_row.add_stretch()
-                # library_name_header_row.add_spacing(13)
-
-
-
                 # === Library Name row ====
                 def handle_new():
-                    workspace_dir = os.path.join(self.data_base_dir_with_date, self.__library_name)
-                    Cache.db_make_directory_if_needed(workspace_dir)
-                    path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
-                    if not os.path.exists(path):
-                        with open(path, "w") as fp:
-                            json.dump({}, fp)
-                    if os.path.exists(path):
-                        myapi.application._application.switch_library(workspace_dir)
-                        return True
-                    return False
+                    if library_name_field.text != "":
+                        workspace_dir = os.path.join(self.data_base_dir_with_date, self.__library_name)
+                        Cache.db_make_directory_if_needed(workspace_dir)
+                        path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
+                        if not os.path.exists(path):
+                            with open(path, "w") as fp:
+                                json.dump({}, fp)
+                        if os.path.exists(path):
+                            myapi.application._application.switch_library(workspace_dir)
+                            on_ok_clicked()
+                            return True
+                        return False
+
+                    else:
+                        logging.info("----missing field for library name!!!")
 
                 # def handle_new_and_close():
                 #     handle_new()
@@ -461,7 +461,6 @@ class PanelQuickDMExportDelegate:
 
                 def on_ok_clicked():
                     logging.info("ok clicked")
-                    handle_new()
                     if self.on_accept:
                         self.on_accept()
                     # Return 'True' to tell Swift to close the Dialog
@@ -469,6 +468,7 @@ class PanelQuickDMExportDelegate:
                 if include_ok:
                     logging.info("ignoring have_ok ---")
                     #ok_cancel_row.add_spacing(13)
+                    self.add_button(_("Create New Library"), handle_new)
                     #self.add_button("New Library", handle_new)
                     #self.add_button('OK', on_ok_clicked)
 
