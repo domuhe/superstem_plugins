@@ -1,22 +1,16 @@
 # standard libraries
 import gettext
 import logging
-import threading
 import datetime
 import os
 import pathlib
 import functools
 import typing
-import asyncio
-import pkgutil
 import json
 
 # local libraries
-from nion.swift import Panel
-from nion.swift.model import ApplicationData
 from nion.ui import Dialog, UserInterface
 from nion.swift.model import ImportExportManager
-from nion.swift.model import DataItem
 from nion.swift.model import Cache
 
 _ = gettext.gettext
@@ -168,7 +162,6 @@ class PanelSuperSTEMDelegate:
 
         # we only export to DM
         self.io_handler_id = "dm-io-handler"
-        self.writer = ImportExportManager.ImportExportManager().get_writer_by_id(self.io_handler_id)
 
         # SuperSTEM config file
         self.superstem_config_file = api.application.configuration_location / pathlib.Path("superstem_customisation.json")
@@ -370,17 +363,19 @@ class PanelSuperSTEMDelegate:
 
                 def handle_new():
                     if library_name_field.text != "":
-                        workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
-                        Cache.db_make_directory_if_needed(workspace_dir)
-                        path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
-                        if not os.path.exists(path):
-                            with open(path, "w") as fp:
-                                json.dump({}, fp)
-                        if os.path.exists(path):
-                            myapi.application._application.switch_library(workspace_dir)
-                            on_ok_clicked()
-                            return True
-                        return False
+                        # to ensure the application does not close upon closing the last window, force it
+                        # to stay open while the window is closed and another reopened.
+                        with myapi.application._application.prevent_close():
+                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
+                            Cache.db_make_directory_if_needed(workspace_dir)
+                            path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
+                            if not os.path.exists(path):
+                                with open(path, "w") as fp:
+                                    json.dump({}, fp)
+                            if os.path.exists(path):
+                                myapi.application._application.create_project_reference(pathlib.Path(workspace_dir), library_name_field.text)
+                                return True
+                            return False
 
                     else:
                         logging.info("----missing field for library name!!!")
@@ -395,18 +390,13 @@ class PanelSuperSTEMDelegate:
                         self.on_reject()
                     # Return 'True' to tell Swift to close the Dialog
                     return True
+
                 if include_cancel:
                     self.add_button('Cancel', on_cancel_clicked)
                     ok_cancel_row.add_stretch()
 
-                def on_ok_clicked():
-                    if self.on_accept:
-                        self.on_accept()
-                    # Return 'True' to tell Swift to close the Dialog
-                    return True
                 if include_ok:
                     self.add_button(_("Initialise New Library"), handle_new)
-                    #self.add_button('OK', on_ok_clicked)
 
 
                 # ==== Adding rows to main column ====
@@ -532,6 +522,9 @@ class PanelSuperSTEMDelegate:
             # in two different functions for `on_accept` and `on_reject`.
             WarningDialog(dc.ui, on_accept=report_dialog_closed, on_reject=report_dialog_closed).show()
 
+    def close(self):
+        self.button_widgets_list = []
+
     def create_panel_widget(self, ui, document_controller):
         self.ui = ui
         self.document_controller = document_controller
@@ -618,7 +611,7 @@ class PanelSuperSTEMDelegate:
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_filter', 'DigitalMicrograph Files files (*.dm3 *.dm4)')
 
         self.update_expdir_button.on_clicked = update_expdir_button_clicked
-        update_expdir_row.add_stretch
+        update_expdir_row.add_stretch()
 
         # == create editable export dir field row widget
         expdir_row = ui.create_row_widget()
@@ -638,7 +631,7 @@ class PanelSuperSTEMDelegate:
         self.expdir_field_edit.text = self.expdir_string
         expdir_row.add(self.expdir_field_edit)
         expdir_row.add_spacing(2)
-        expdir_row.add_stretch
+        expdir_row.add_stretch()
 
         # == create label row widget
         label_row = ui.create_row_widget()
@@ -676,6 +669,7 @@ class PanelSuperSTEMDelegate:
         self.fields_no_edit._widget.set_property("width", 40)
         self.fields_sub_edit._widget.set_property("width", 40)
         self.fields_fov_edit._widget.set_property("width", 40)
+
         def handle_no_changed(text):
             """ calls the update button state function for each export button
                 and passes the current text in the No field
@@ -741,7 +735,8 @@ class PanelSuperSTEMDelegate:
 
         # default state of export buttons:
         for button in self.button_widgets_list:
-            button._widget.enabled = False
+            # button._widget.enabled = False
+            self.update_button_state(button)
 
         return column
 
@@ -810,7 +805,7 @@ class PanelSuperSTEMDelegate:
                 Parameters: button_list_index = selected export button string
             """
 
-            writer = self.writer
+            writer = ImportExportManager.ImportExportManager().get_writer_by_id(self.io_handler_id)
             prefix = get_prefix_string(self.fields_no_edit.text)
             postfix = get_postfix_string(self.fields_sub_edit.text,
                                          self.fields_fov_edit.text,
@@ -829,13 +824,13 @@ class PanelSuperSTEMDelegate:
             else:
                 logging.info("- Export Directory already exists")
 
-                if not pathlib.Path.is_file(export_path):
-                    ImportExportManager.ImportExportManager().write_display_item_with_writer(self.__api.application.document_controllers[0]._document_controller.ui, writer, item, str(export_path))
-                    logging.info("- %s", export_path.name)
-                else:
-                    # launch popup dialog if filename already exists
-                    logging.info("- Could not export - file exists")
-                    self.show_warning_dialog("Could not export - file exists", True, False)
+            if not pathlib.Path.is_file(export_path):
+                ImportExportManager.ImportExportManager().write_display_item_with_writer(writer, item, export_path)
+                logging.info("- %s", export_path.name)
+            else:
+                # launch popup dialog if filename already exists
+                logging.info("- Could not export - file exists")
+                self.show_warning_dialog("Could not export - file exists", True, False)
 
         # == make specific export buttons
         # don't know how many buttons there are, so it's possible to have
