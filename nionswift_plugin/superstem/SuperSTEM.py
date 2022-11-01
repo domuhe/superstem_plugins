@@ -48,7 +48,7 @@ def get_superstem_settings(superstem_config_file: pathlib.Path):
     """
     conf_file = superstem_config_file
     superstem_settings = {}
-    logging.info("Reading SuperSTEM config file %s", conf_file)
+    #logging.info("Reading SuperSTEM config file %s", conf_file)
 
     try:  # do nothing unless config file exists and is not empty
         if conf_file.is_file() and conf_file.stat().st_size != 0:
@@ -59,7 +59,7 @@ def get_superstem_settings(superstem_config_file: pathlib.Path):
                     logging.info("        - Please edit and enter key/value pair for export_base_directory")
                 else:
                     pass
-                    #logging.info("- SuperSTEM settings are %s", superstem_settings)
+                    logging.info("- SuperSTEM settings are %s", superstem_settings)
         else:
             logging.info("WARNING - SuperSTEM config file %s NOT FOUND", conf_file)
             logging.info("        - Please create and enter key/value pair for export_base_directory")
@@ -83,7 +83,28 @@ def get_data_base_dir(superstem_config_file):
 
 def get_data_base_dir_with_year(superstem_config_file):
     data_base_dir_path = pathlib.Path(get_data_base_dir(superstem_config_file))
-    return str(data_base_dir_path.joinpath(str(datetime.datetime.now().year)))
+    #we no longer want year in our data base dir path:
+    #return str(data_base_dir_path.joinpath(str(datetime.datetime.now().year)))
+    return str(data_base_dir_path)
+
+def get_export_base_dir(superstem_config_file):
+    """
+    reads location for export base directory from superstem config file,
+    if there is no entry it falls back to /tmp/NewData/sstem
+    """
+    export_base_dir = get_superstem_settings(superstem_config_file).get('export_base_directory')
+    if export_base_dir is None:
+        export_base_dir_path = pathlib.Path('/tmp/NewData/sstem/')
+    else:
+        export_base_dir_path = pathlib.Path(export_base_dir)
+
+    return str(export_base_dir_path)
+
+def get_export_base_dir_with_year(superstem_config_file):
+    export_base_dir_path = pathlib.Path(get_export_base_dir(superstem_config_file))
+    #we no longer want year in our export base dir path:
+    #return str(export_base_dir_path.joinpath(str(datetime.datetime.now().year)))
+    return str(export_base_dir_path)
 
 def write_superstem_config_file(superstem_config_file: pathlib.Path, superstem_settings):
     """ writes the current superstem settings to the superstem config file """
@@ -115,6 +136,19 @@ class PanelSuperSTEMDelegate:
     ==========================================================================
     Revisions:
 
+    20221028; DMH:
+        Different directories for library (data_base_directory) and export 
+        (export_base_directory).
+        No longer have YYYY subfolder below data_base_directory and 
+        export_base_directory (currently a quick hack that only comments out the
+        addition of _YYYY in the functions get_data_base_dir_with_year and
+        get_export_base_dir_with_year, but leave all dependend code in place.
+        Removed subsubfolder (and _DMdata postfix thereof) from export directory path.
+        Added fall-back to superstem_custom.json settings for site and instrument
+        fields in New Liberary dialog. This uses any existing Session fields for
+        site and instrument as default, then the values from superstem_custom.json.
+        Corrected widget layout for Set Export Folder.
+        
     20200915; DMH:
         automatic upper case for microscopist TLA
     20200911; DMH:
@@ -233,8 +267,8 @@ class PanelSuperSTEMDelegate:
                 # === session metadata entry fields widget ===
                 field_descriptions = [
                     [_("Site"), _("SuperSTEM"), "site"],
-                    [_("Instrument"), _("Instrument Description"), "instrument"],
-                    [_("Task"), _("Project Number"), "task"],
+                    [_("Instrument"), _("sstem3"), "instrument"],
+                    [_("Task"), _("Project Number (optional)"), "task"],
                     [_("Microscopist"), _("Microscopist <TLA>"), "microscopist"],
                     [_("Sample"), _("Sample Number <Snnnn>"), "sample"],
                     [_("Sample Area"), _("Sample Description"), "sample_area"],
@@ -296,7 +330,9 @@ class PanelSuperSTEMDelegate:
                     elif 'sample_area' == field_id and text == "":
                         self.have_sample_area = False
 
-                    if self.have_task and self.have_microscopist and self.have_sample and self.have_sample_area:
+                    #task is optional
+                    #if self.have_task and self.have_microscopist and self.have_sample and self.have_sample_area:
+                    if self.have_microscopist and self.have_sample and self.have_sample_area:
                         self.all_good = True
                     else:
                         self.all_good = False
@@ -321,11 +357,17 @@ class PanelSuperSTEMDelegate:
                     row.add(self.ui.create_label_widget(title, properties={"width": 100}))
                     line_edit_widget = self.ui.create_line_edit_widget(properties={"width": 200})
                     line_edit_widget.placeholder_text = placeholder
-                    # take site and instrument from persistent nion settings
+                    # Provide default field entries for "Site" and "Instrument"
+                    # take site and instrument from persistent nion settings,i.e. entries in "Session" panel
+                    # if there are none, fall-back to SuperSTEM custom settings file
                     if field_id == "site" :
                         line_edit_widget.text =  myapi.library.get_library_value("stem.session.site")
+                        if line_edit_widget.text ==  "":
+                             line_edit_widget.text = get_superstem_settings(superstem_config_file).get('superstem_site')
                     elif field_id == "instrument":
                         line_edit_widget.text = myapi.library.get_library_value("stem.session.instrument")
+                        if line_edit_widget.text ==  "":
+                             line_edit_widget.text = get_superstem_settings(superstem_config_file).get('superstem_instrument')
                     # call function when field is edited:
                     line_edit_widget.on_editing_finished = functools.partial(line_edit_changed, line_edit_widget, field_id)
                     # add new widget to dictionary of widgets
@@ -351,7 +393,7 @@ class PanelSuperSTEMDelegate:
                 # === Show Data Base Folder row ===
                 show_data_base_dir_row = self.ui.create_row_widget()
                 show_data_base_dir_row.add_spacing(13)
-                show_data_base_dir_row.add(self.ui.create_label_widget(_("Data Base Folder: "), properties={"font": "bold"}))
+                show_data_base_dir_row.add(self.ui.create_label_widget(_("Library Base Folder: "), properties={"font": "bold"}))
                 show_data_base_dir_row.add_spacing(5)
                 show_data_base_dir_row.add(self.ui.create_label_widget(self.data_base_dir_with_year,properties={"stylesheet": "font: italic; color: gray"}))
                 show_data_base_dir_row.add_stretch()
@@ -396,7 +438,7 @@ class PanelSuperSTEMDelegate:
                     ok_cancel_row.add_stretch()
 
                 if include_ok:
-                    self.add_button(_("Initialise New Library"), handle_new)
+                    self.add_button(_("Create New Library"), handle_new)
 
 
                 # ==== Adding rows to main column ====
@@ -547,8 +589,8 @@ class PanelSuperSTEMDelegate:
                 microscopist, sampleID, sample description (i.e. sample_area).
                 Returns the export directory path as string.
             """
-            data_base_dir_with_year = get_data_base_dir_with_year(self.superstem_config_file)
-            data_base_dir_with_year_path =  pathlib.Path(data_base_dir_with_year)
+            export_base_dir_with_year = get_export_base_dir_with_year(self.superstem_config_file)
+            export_base_dir_with_year_path =  pathlib.Path(export_base_dir_with_year)
             date_string = datetime.datetime.now().strftime("%Y_%m_%d")
             #enforce empty string if field has no entry
             microscopist = str(self.__api.library.get_library_value("stem.session.microscopist")).upper() or ""
@@ -556,17 +598,18 @@ class PanelSuperSTEMDelegate:
             sample_area =  str(self.__api.library.get_library_value("stem.session.sample_area")) or ""
             session_string = "_".join([ microscopist, sample, sample_area ])
             # pathlib "/" method to ;contruct export dir path:
-            expdir_path = data_base_dir_with_year_path.joinpath(
-                    date_string + "_" + session_string,
-                    date_string + "_" + session_string + "_" + "DMdata")
+            expdir_path = export_base_dir_with_year_path.joinpath(
+                    date_string + "_" + session_string)
+            logging.info("Exporting to: %s",expdir_path)
             return str(expdir_path)
 
         def write_persistent_vars(self):
             """ Writes export base directory path, export directory path and
                 chosen export format to config files (superstem and Nion persistent data).
             """
-            current_superstem_settings = get_superstem_settings(self.superstem_config_file)
-            write_superstem_config_file(self.superstem_config_file, current_superstem_settings)
+            #current_superstem_settings = get_superstem_settings(self.superstem_config_file)
+            #we haven't changed superstem_settings, no need to write them to file
+            #write_superstem_config_file(self.superstem_config_file, current_superstem_settings)
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_directory', self.expdir_string)
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_filter', 'DigitalMicrograph Files files (*.dm3 *.dm4)')
 
@@ -599,6 +642,7 @@ class PanelSuperSTEMDelegate:
         update_expdir_row.add_stretch()
         update_expdir_row.add(self.update_expdir_button)
         update_expdir_row.add_spacing(2)
+        #update_expdir_row.add_stretch()
 
         def update_expdir_button_clicked():
             """ Writes updated export directory string from session meta data
@@ -611,14 +655,14 @@ class PanelSuperSTEMDelegate:
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_filter', 'DigitalMicrograph Files files (*.dm3 *.dm4)')
 
         self.update_expdir_button.on_clicked = update_expdir_button_clicked
-        update_expdir_row.add_stretch()
 
         # == create editable export dir field row widget
         expdir_row = ui.create_row_widget()
         expdir_row.add_spacing(3)
-        self.expdir_field_edit = ui.create_line_edit_widget()
+        self.expdir_field_edit = ui.create_line_edit_widget("i")
         self.expdir_field_edit._widget.set_property("stylesheet", "background-color: white")
-        self.expdir_field_edit.placeholder_text = "<export dir set from session metadata>"
+        self.expdir_field_edit._widget.set_property("width", 320)
+        #doesn't work: self.expdir_field_edit.text = "<export dir set from session metadata>"
 
         def handle_expdir_field_changed(text):
             """ Handles manual edits to the expdir
@@ -626,14 +670,24 @@ class PanelSuperSTEMDelegate:
             """
             self.expdir_string = text
             write_persistent_vars(self)
+            logging.info("Exporting to: %s", self.expdir_string)
             self.expdir_field_edit.request_refocus()  # not sure what this does
+
         self.expdir_field_edit.on_editing_finished = handle_expdir_field_changed
         self.expdir_field_edit.text = self.expdir_string
         expdir_row.add(self.expdir_field_edit)
         expdir_row.add_spacing(2)
         expdir_row.add_stretch()
 
-        # == create label row widget
+        # == create quickexport label row widget
+        quickexport_row = ui.create_row_widget()
+        quickexport_row.add_spacing(3)
+        self.quickexport_text =  ui.create_label_widget(_("Quick DM Export:"))
+        self.quickexport_text._widget.set_property("width", 320)
+        quickexport_row.add(self.quickexport_text)
+        quickexport_row.add_spacing(2)
+        
+         # == create label row widget
         label_row = ui.create_row_widget()
         label_row.add_spacing(3)
         # define labels
@@ -721,11 +775,13 @@ class PanelSuperSTEMDelegate:
         # == add the row widgets to the column widget
         column.add_spacing(8)
         column.add(new_library_button_row)
-        column.add_spacing(12)
+        column.add_spacing(5)
         column.add(update_expdir_row)
         column.add_spacing(3)
         column.add(expdir_row)
         column.add_spacing(8)
+        column.add(quickexport_row)
+        column.add_spacing(3)
         column.add(label_row)
         column.add(fields_row)
         column.add_spacing(3)
