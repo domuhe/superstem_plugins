@@ -611,7 +611,8 @@ class PanelSuperSTEMDelegate:
             sample_area =  str(self.__api.library.get_library_value("stem.session.sample_area")) or ""
             task =  str(self.__api.library.get_library_value("stem.session.task")) or ""
             if task != "":
-                session_string = "_".join([ microscopist, sample, sample_area, task ])
+                prefix_task = "p" + task
+                session_string = "_".join([ microscopist, sample, sample_area, prefix_task ])
             else:
                 session_string = "_".join([ microscopist, sample, sample_area ])
             # pathlib "/" method to ;contruct export dir path:
@@ -703,40 +704,44 @@ class PanelSuperSTEMDelegate:
         # == create quickexport label row widget
         quickexport_row = ui.create_row_widget()
         quickexport_row.add_spacing(2)
-        self.quickexport_text =  ui.create_label_widget(_("Quick DM Export:"))
+        self.quickexport_text =  ui.create_label_widget(_("Quick DM Export: <sup> (\"Sub\" optional)</sup>"))
         self.quickexport_text._widget.set_property("width", 320)
         quickexport_row.add(self.quickexport_text)
         quickexport_row.add_spacing(0)
         
-        # == create label row widget
-        label_row = ui.create_row_widget()
-        label_row.add_spacing(3)
-        # define labels
-        # properties parameters are not accepted here !?:
-        self.label_no = ui.create_label_widget(_("No"))
-        self.label_sub = ui.create_label_widget(_("Sub"))
-        self.label_fov = ui.create_label_widget(_("FOV"))
-        self.label_descr = ui.create_label_widget(_("Description"))
-        self.label_no._widget.set_property("width", 40)
-        self.label_sub._widget.set_property("width", 40)
-        self.label_fov._widget.set_property("width", 40)
-        label_row.add(self.label_no)
-        label_row.add_spacing(1)
-        label_row.add(self.label_sub)
-        label_row.add_spacing(1)
-        label_row.add(self.label_fov)
-        label_row.add_spacing(1)
-        label_row.add(self.label_descr)
-        label_row.add_spacing(2)
+        # # == create label row widget
+        # label_row = ui.create_row_widget()
+        # label_row.add_spacing(3)
+        # # define labels
+        # # properties parameters are not accepted here !?:
+        # self.label_no = ui.create_label_widget(_("No"))
+        # self.label_sub = ui.create_label_widget(_("Sub"))
+        # self.label_fov = ui.create_label_widget(_("FOV"))
+        # self.label_descr = ui.create_label_widget(_("Description"))
+        # self.label_no._widget.set_property("width", 40)
+        # self.label_sub._widget.set_property("width", 40)
+        # self.label_fov._widget.set_property("width", 40)
+        # label_row.add(self.label_no)
+        # label_row.add_spacing(1)
+        # label_row.add(self.label_sub)
+        # label_row.add_spacing(1)
+        # label_row.add(self.label_fov)
+        # label_row.add_spacing(1)
+        # label_row.add(self.label_descr)
+        # label_row.add_spacing(2)
 
         # == create editable fields row widget
         fields_row = ui.create_row_widget()
         fields_row.add_spacing(3)
         # define editable fields for field row
         self.fields_no_edit = ui.create_line_edit_widget()
+        self.fields_no_edit._widget.placeholder_text = "No"
         self.fields_sub_edit = ui.create_line_edit_widget()
+        self.fields_sub_edit._widget.placeholder_text = "Sub"
         self.fields_fov_edit = ui.create_line_edit_widget()
+        self.fields_fov_edit._widget.placeholder_text = "FOV"
         self.fields_descr_edit = ui.create_line_edit_widget()
+        self.fields_descr_edit._widget.placeholder_text = "Description"
         self.fields_no_edit._widget.set_property("stylesheet", "background-color: white")
         self.fields_sub_edit._widget.set_property("stylesheet", "background-color: white")
         self.fields_fov_edit._widget.set_property("stylesheet", "background-color: white")
@@ -803,7 +808,7 @@ class PanelSuperSTEMDelegate:
         column.add_spacing(8)
         column.add(quickexport_row)
         column.add_spacing(3)
-        column.add(label_row)
+        #column.add(label_row)
         column.add(fields_row)
         column.add_spacing(3)
         column.add(self.button_column)
