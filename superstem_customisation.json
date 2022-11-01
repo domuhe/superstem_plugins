@@ -1,3 +1,6 @@
 {
-    "export_base_directory" : "/tmp/NewData/sstem3"
+    "data_base_directory": "E:\Active Swift Libraries",
+    "export_base_directory": "D:\New Data",
+    "superstem_site": "SuperSTEM",
+    "superstem_instrument": "sstem3"
 }

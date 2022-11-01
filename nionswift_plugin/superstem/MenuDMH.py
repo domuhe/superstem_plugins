@@ -25,6 +25,7 @@ class MenuDMHDelegate(object):
         pass
 
     def menu_item_execute(self, document_window):
+        # creates a data item
         self.__api.library.create_data_item_from_data(numpy.random.randn(64, 64), title=_("Random 64"))
         logging.info("MenuDMHDelegate menu_item_execute has been called.")
 

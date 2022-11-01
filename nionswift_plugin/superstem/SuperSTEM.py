@@ -15,12 +15,13 @@ from nion.swift.model import Cache
 
 _ = gettext.gettext
 
+# global flag to indicate whether "Set Export Folder" has been run at least once
+flag_set_exp_dir = 0
 
 # utility functions
 def divide_round_up(x, n):
     """ returns integer division rounded up """
     return int((x + (n - 1))/n)
-
 
 # functions to handle prefix and postfix strings for renaming
 def get_prefix_string(no_field_string):
@@ -59,7 +60,7 @@ def get_superstem_settings(superstem_config_file: pathlib.Path):
                     logging.info("        - Please edit and enter key/value pair for export_base_directory")
                 else:
                     pass
-                    logging.info("- SuperSTEM settings are %s", superstem_settings)
+                    #logging.info("- SuperSTEM settings are %s", superstem_settings)
         else:
             logging.info("WARNING - SuperSTEM config file %s NOT FOUND", conf_file)
             logging.info("        - Please create and enter key/value pair for export_base_directory")
@@ -364,10 +365,22 @@ class PanelSuperSTEMDelegate:
                         line_edit_widget.text =  myapi.library.get_library_value("stem.session.site")
                         if line_edit_widget.text ==  "":
                              line_edit_widget.text = get_superstem_settings(superstem_config_file).get('superstem_site')
+                             # if site field is using superstem setting sile we need to update global
+                             # global session metadata with empty stringnew value
+                             session_metadata_key = "stem.session." + str(field_id)
+                             api.library.set_library_value(session_metadata_key, line_edit_widget.text)
                     elif field_id == "instrument":
                         line_edit_widget.text = myapi.library.get_library_value("stem.session.instrument")
                         if line_edit_widget.text ==  "":
                              line_edit_widget.text = get_superstem_settings(superstem_config_file).get('superstem_instrument')
+                             # if site field is using superstem setting sile we need to update global
+                             # global session metadata with empty stringnew value
+                             session_metadata_key = "stem.session." + str(field_id)
+                             api.library.set_library_value(session_metadata_key, line_edit_widget.text)
+                    # ensure that Session panel Task field is cleared when widget is called 
+                    # by updating global session metadata with empty string
+                    session_metadata_key = "stem.session." + str("task")
+                    api.library.set_library_value(session_metadata_key, "")
                     # call function when field is edited:
                     line_edit_widget.on_editing_finished = functools.partial(line_edit_changed, line_edit_widget, field_id)
                     # add new widget to dictionary of widgets
@@ -438,7 +451,7 @@ class PanelSuperSTEMDelegate:
                     ok_cancel_row.add_stretch()
 
                 if include_ok:
-                    self.add_button(_("Create New Library"), handle_new)
+                    self.add_button(_("Create New Library and Session"), handle_new)
 
 
                 # ==== Adding rows to main column ====
@@ -575,7 +588,7 @@ class PanelSuperSTEMDelegate:
         button_list = [
                 "HAADF", "MAADF", "BF", "ABF",
                 "LAADF", "SI-Survey", "SI-During", "SI-After",
-                "SI-EELS", "EELS-sngl", "Ronchi"
+                "SI-EELS", "EELS-single", "Ronchi"
                 ]
         no_buttons_per_row = 4
         # initialise export dir field with empty string
@@ -596,8 +609,13 @@ class PanelSuperSTEMDelegate:
             microscopist = str(self.__api.library.get_library_value("stem.session.microscopist")).upper() or ""
             sample = str(self.__api.library.get_library_value("stem.session.sample")) or ""
             sample_area =  str(self.__api.library.get_library_value("stem.session.sample_area")) or ""
-            session_string = "_".join([ microscopist, sample, sample_area ])
+            task =  str(self.__api.library.get_library_value("stem.session.task")) or ""
+            if task != "":
+                session_string = "_".join([ microscopist, sample, sample_area, task ])
+            else:
+                session_string = "_".join([ microscopist, sample, sample_area ])
             # pathlib "/" method to ;contruct export dir path:
+    
             expdir_path = export_base_dir_with_year_path.joinpath(
                     date_string + "_" + session_string)
             logging.info("Exporting to: %s",expdir_path)
@@ -649,7 +667,10 @@ class PanelSuperSTEMDelegate:
                 to persistent data and ensures export as DM file.
                 Gets fired when expdir_button is clicked.
             """
+            global flag_set_exp_dir
             expdir_string = get_export_dir_string()
+            if expdir_string != "":
+                flag_set_exp_dir = 1
             self.expdir_field_edit.text = expdir_string
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_directory', expdir_string)
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_filter', 'DigitalMicrograph Files files (*.dm3 *.dm4)')
@@ -681,13 +702,13 @@ class PanelSuperSTEMDelegate:
 
         # == create quickexport label row widget
         quickexport_row = ui.create_row_widget()
-        quickexport_row.add_spacing(3)
+        quickexport_row.add_spacing(2)
         self.quickexport_text =  ui.create_label_widget(_("Quick DM Export:"))
         self.quickexport_text._widget.set_property("width", 320)
         quickexport_row.add(self.quickexport_text)
-        quickexport_row.add_spacing(2)
+        quickexport_row.add_spacing(0)
         
-         # == create label row widget
+        # == create label row widget
         label_row = ui.create_row_widget()
         label_row.add_spacing(3)
         # define labels
@@ -823,12 +844,16 @@ class PanelSuperSTEMDelegate:
         elif 'descr' in kwargs and kwargs['descr'] == "":
             self.have_descr = False
 
-        # only if related status booleans of required fields
-        # (No, FOV and Description) are all True can we set all good to go
-        if self.have_no and self.have_fov and self.have_descr:
+        # only if related status booleans of required fields (No, FOV and Description)
+        # are all True and exp_dir_path is defined (i.e. Set Export Folder has run at
+        # least once) can we set all good to go
+        #logging.info("flag_set_exp_dir %s", str(flag_set_exp_dir))
+        if self.have_no and self.have_fov and self.have_descr and flag_set_exp_dir == 1:
             self.all_good = True
         else:
             self.all_good = False
+
+ 
 
         def update():
             """ enables/disables button widget
