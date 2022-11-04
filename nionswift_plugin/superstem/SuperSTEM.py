@@ -805,7 +805,7 @@ class PanelSuperSTEMDelegate:
         column.add(update_expdir_row)
         column.add_spacing(3)
         column.add(expdir_row)
-        column.add_spacing(8)
+        column.add_spacing(9)
         column.add(quickexport_row)
         column.add_spacing(3)
         #column.add(label_row)

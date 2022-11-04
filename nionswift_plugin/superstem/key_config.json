@@ -1,0 +1,182 @@
+{
+    "display.snapshot_display": {
+        "window": "Ctrl+S"
+    },
+    "display_panel.delete_graphics": {
+        "display_panel": "delete"
+    },
+    "display_panel.cycle_display": {
+        "display_panel_browser": "v"
+    },
+    "raster_display.fit_view": {
+        "raster_display": "0"
+    },
+    "raster_display.fill_view": {
+        "raster_display": ["Shift+0", "Shift+)", ")"]
+    },
+    "raster_display.1_view": {
+        "raster_display": "1"
+    },
+    "raster_display.2_view": {
+        "raster_display": "2"
+    },
+    "raster_display.auto_display": {
+        "raster_display": "enter"
+    },
+    "raster_display.nudge_graphics_left": {
+        "raster_display_graphics": "left_arrow"
+    },
+    "raster_display.nudge_graphics_right": {
+        "raster_display_graphics": "right_arrow"
+    },
+    "raster_display.nudge_graphics_up": {
+        "raster_display_graphics": "up_arrow"
+    },
+    "raster_display.nudge_graphics_down": {
+        "raster_display_graphics": "down_arrow"
+    },
+    "raster_display.move_graphics_left": {
+        "raster_display_graphics": "Shift+left_arrow"
+    },
+    "raster_display.move_graphics_right": {
+        "raster_display_graphics": "Shift+right_arrow"
+    },
+    "raster_display.move_graphics_up": {
+        "raster_display_graphics": "Shift+up_arrow"
+    },
+    "raster_display.move_graphics_down": {
+        "raster_display_graphics": "Shift+down_arrow"
+    },
+    "raster_display.nudge_left": {
+        "raster_display": ["left_arrow", "j"]
+    },
+    "raster_display.nudge_right": {
+        "raster_display": ["right_arrow", "k"]
+    },
+    "raster_display.nudge_up": {
+        "raster_display": ["up_arrow", "i"]
+    },
+    "raster_display.nudge_down": {
+        "raster_display": ["down_arrow", "m"]
+    },
+    "raster_display.move_left": {
+        "raster_display": ["Shift+left_arrow", "Shift+J"]
+    },
+    "raster_display.move_right": {
+        "raster_display": ["Shift+right_arrow", "Shift+K"]
+    },
+    "raster_display.move_up": {
+        "raster_display": ["Shift+up_arrow", "Shift+I"]
+    },
+    "raster_display.move_down": {
+        "raster_display": ["Shift+down_arrow", "Shift+M"]
+    },
+    "raster_display.nudge_slice_left": {
+        "raster_display": ["Ctrl+left_arrow", "move_to_start_of_line"]
+    },
+    "raster_display.nudge_slice_right": {
+        "raster_display": ["Ctrl+right_arrow", "move_to_end_of_line"]
+    },
+    "raster_display.zoom_out": {
+        "raster_display": "-"
+    },
+    "raster_display.zoom_in": {
+        "raster_display": ["=", "Shift++", "+"]
+    },
+    "line_plot_display.auto_display": {
+        "line_plot_display": "enter"
+    },
+    "line_plot_display.nudge_graphics_left": {
+        "line_plot_display_graphics": "left_arrow"
+    },
+    "line_plot_display.nudge_graphics_right": {
+        "line_plot_display_graphics": "right_arrow"
+    },
+    "line_plot_display.move_graphics_left": {
+        "line_plot_display_graphics": "Shift+left_arrow"
+    },
+    "line_plot_display.move_graphics_right": {
+        "line_plot_display_graphics": "Shift+right_arrow"
+    },
+    "item.assign_variable_reference": {
+        "window": "Ctrl+Shift+K"
+    },
+    "item.copy_uuid": {
+        "window": "Ctrl+Shift+U"
+    },
+    "line_profile.contract": {
+        "line_profile_graphic": "-"
+    },
+    "line_profile.expand": {
+        "line_profile_graphic": ["=", "Shift++", "+"]
+    },
+    "item.duplicate": {
+        "window": "Ctrl+D"
+    },
+    "item.clear": {
+        "window": "c"
+    },
+    "item.display_panel.close": {
+        "window": "d"
+    },
+   "item.window.select_all": {
+        "window": "Ctrl+a"
+    },    
+    "processing.pick": {
+        "raster_display": "P"
+    },
+    "processing.pick_average": {
+        "raster_display": "p"
+    },
+    "processing.fft": {
+        "window": "Ctrl+F"
+    },
+    "processing.inverse_fft": {
+        "window": "Ctrl+Shift+F"
+    },
+    "processing.line_profile": {
+        "raster_display": "l"
+    },
+    "window.toggle_filter": {
+        "window": "Ctrl+\\"
+    },
+    "window.data_item_recorder": {
+        "window": "Ctrl+Shift+R"
+    },
+    "window.close": {
+        "window": "close"
+    },
+    "window.edit_computation": {
+        "window": "Ctrl+E"
+    },
+    "window.edit_data_item_script": {
+        "window": "Ctrl+Shift+E"
+    },
+    "window.open_run_scripts": {
+        "window": "Ctrl+R"
+    },
+    "window.open_console": {
+        "window": "Ctrl+K"
+    },
+    "workspace.previous": {
+        "window": "Ctrl+["
+    },
+    "workspace.next": {
+        "window": "Ctrl+]"
+    },
+    "workspace.new": {
+        "window": "Ctrl+Alt+L"
+    },
+    "window.set_tool_mode.pointer": {
+        "display_panel": "e"
+    },
+    "window.set_tool_mode.hand": {
+        "display_panel": "h"
+    },
+    "window.set_tool_mode.line": {
+        "display_panel": "n"
+    },
+    "window.set_tool_mode.rectangle": {
+        "display_panel": "r"
+    }
+}
