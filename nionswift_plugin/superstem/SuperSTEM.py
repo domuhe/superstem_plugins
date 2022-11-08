@@ -421,13 +421,19 @@ class PanelSuperSTEMDelegate:
                         # to ensure the application does not close upon closing the last window, force it
                         # to stay open while the window is closed and another reopened.
                         with myapi.application._application.prevent_close():
-                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
+                            # we no longer want a separate top directory for each new library:
+                            #workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
+                            workspace_dir = self.data_base_dir_with_year
+                            logging.info("workspace_dir %s %s", workspace_dir, self.data_base_dir_with_year)
                             Cache.db_make_directory_if_needed(workspace_dir)
-                            path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
-                            if not os.path.exists(path):
-                                with open(path, "w") as fp:
-                                    json.dump({}, fp)
-                            if os.path.exists(path):
+                            # Nionswift no longer uses *.nslib -> *.nsproj, disable this:
+                            #path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
+                            #if not os.path.exists(path):
+                            #    with open(path, "w") as fp:
+                            #        json.dump({}, fp)
+                            #if os.path.exists(path):
+                            # create project file if workspace_dir exists
+                            if os.path.exists(workspace_dir):
                                 myapi.application._application.create_project_reference(pathlib.Path(workspace_dir), library_name_field.text)
                                 return True
                             return False
