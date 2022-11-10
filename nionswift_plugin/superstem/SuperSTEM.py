@@ -593,8 +593,8 @@ class PanelSuperSTEMDelegate:
         # list of export buttons (will be ordered in rows of 4 buttons)
         button_list = [
                 "HAADF", "MAADF", "BF", "ABF",
-                "LAADF", "SI-Survey", "SI-During", "SI-After",
-                "SI-EELS", "EELS-single", "Ronchi"
+                "LAADF", "SI-Survey", "SI-HAADF", "SI-After",
+                "SI-EELS", "EELS-single", "EELS-multi","Ronchi"
                 ]
         no_buttons_per_row = 4
         # initialise export dir field with empty string
@@ -914,14 +914,15 @@ class PanelSuperSTEMDelegate:
             if not pathlib.Path.is_dir(export_path.parent):
                 export_path.parent.mkdir(parents=True)  # mkdir -p
             else:
-                logging.info("- Export Directory already exists")
+                #logging.info("- Export Directory exists")
+                pass
 
             if not pathlib.Path.is_file(export_path):
                 ImportExportManager.ImportExportManager().write_display_item_with_writer(writer, item, export_path)
                 logging.info("- %s", export_path.name)
             else:
                 # launch popup dialog if filename already exists
-                logging.info("- Could not export - file exists")
+                logging.info("----- COULD NOT EXPORT - FILE EXISTS !!! -----")
                 self.show_warning_dialog("Could not export - file exists", True, False)
 
         # == make specific export buttons
