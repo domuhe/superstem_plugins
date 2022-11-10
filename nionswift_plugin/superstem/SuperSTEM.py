@@ -747,7 +747,7 @@ class PanelSuperSTEMDelegate:
         self.fields_fov_edit = ui.create_line_edit_widget()
         self.fields_fov_edit._widget.placeholder_text = "FOV"
         self.fields_descr_edit = ui.create_line_edit_widget()
-        self.fields_descr_edit._widget.placeholder_text = "Description"
+        self.fields_descr_edit._widget.placeholder_text = "Description  (hit RET when finished)"
         self.fields_no_edit._widget.set_property("stylesheet", "background-color: white")
         self.fields_sub_edit._widget.set_property("stylesheet", "background-color: white")
         self.fields_fov_edit._widget.set_property("stylesheet", "background-color: white")
