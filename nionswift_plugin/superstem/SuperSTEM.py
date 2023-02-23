@@ -711,9 +711,28 @@ class PanelSuperSTEMDelegate:
         quickexport_row = ui.create_row_widget()
         quickexport_row.add_spacing(2)
         self.quickexport_text =  ui.create_label_widget(_("Quick DM Export: <sup> (\"Sub\" optional)</sup>"))
-        self.quickexport_text._widget.set_property("width", 320)
+        self.quickexport_text._widget.set_property("width", 220)
+        quickexport_dmversion_label = ui.create_label_widget(_("DM Version:"))
+        self.quickexport_dmver_edit = ui.create_line_edit_widget()
+        self.quickexport_dmver_edit._widget.placeholder_text = "3"
+        self.quickexport_dmver_edit._widget.set_property("stylesheet", "background-color: white")
+        self.quickexport_dmver_edit._widget.set_property("width", 40)        
         quickexport_row.add(self.quickexport_text)
+        quickexport_row.add(quickexport_dmversion_label)
+        quickexport_row.add(self.quickexport_dmver_edit)
         quickexport_row.add_spacing(0)
+
+        def handle_dmver_changed(text):
+            """ calls the update button state function for each export button
+                and passes the current text in the No field
+            """
+            dmversion=text
+            print(f'dmversion {dmversion}')
+            print(f'dmver {self.quickexport_dmver_edit.text}')
+            #for button in self.button_widgets_list:
+            #    self.update_button_state(button, no=text)
+            ## fields_nr_sub.request_refocus()
+        self.quickexport_dmver_edit.on_editing_finished = handle_dmver_changed        
         
         # # == create label row widget
         # label_row = ui.create_row_widget()
@@ -908,7 +927,19 @@ class PanelSuperSTEMDelegate:
             # get latest export directory from persistent config
             directory_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('export_directory')
             logging.info("Exporting to %s ", directory_string)
-            filename = "{0}.{1}".format(item.title, writer.extensions[0])
+
+            ## filename is quick export concatenation plus dm3 or dm4 extension            
+            #filename = "{0}.{1}".format(item.title, writer.extensions[0])
+            # we default to writing dm4 files:
+            #filename = "{0}.{1}".format(item.title, "dm4")
+            # we take supplied dmversion by quickexport_dmver_edit field, if = "4", else default to "dm3"
+            if str(self.quickexport_dmver_edit.text) == "4":
+                dmextension="dm" + str(self.quickexport_dmver_edit.text)
+            else:
+                dmextension="dm3"
+                
+            print(f'dmextension {dmextension}')
+            filename = "{0}.{1}".format(item.title, dmextension)
             export_path = pathlib.Path(directory_string).joinpath(filename)
 
             if not pathlib.Path.is_dir(export_path.parent):
