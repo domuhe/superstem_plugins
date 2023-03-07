@@ -137,6 +137,9 @@ class PanelSuperSTEMDelegate:
     ==========================================================================
     Revisions:
 
+    20230307; DMH:
+        Added a field and toggle button with which to change the DM version of the
+        output data files. Default is DM3.
     20221028; DMH:
         Different directories for library (data_base_directory) and export 
         (export_base_directory).
@@ -194,7 +197,9 @@ class PanelSuperSTEMDelegate:
         self.button_widgets_list = []
         # get current year
         self.year = datetime.datetime.now().year
-
+        # dmver toggle button
+        self.quickexport_dmver_toggle_button_state="3"
+        
         # we only export to DM
         self.io_handler_id = "dm-io-handler"
 
@@ -585,6 +590,7 @@ class PanelSuperSTEMDelegate:
 
     def close(self):
         self.button_widgets_list = []
+        self.quickexport_dmver_toggle_button_state = "3"
 
     def create_panel_widget(self, ui, document_controller):
         self.ui = ui
@@ -714,25 +720,53 @@ class PanelSuperSTEMDelegate:
         self.quickexport_text._widget.set_property("width", 220)
         quickexport_dmversion_label = ui.create_label_widget(_("DM Version:"))
         self.quickexport_dmver_edit = ui.create_line_edit_widget()
-        self.quickexport_dmver_edit._widget.placeholder_text = "3"
+        self.quickexport_dmver_edit._widget.placeholder_text = self.quickexport_dmver_toggle_button_state
         self.quickexport_dmver_edit._widget.set_property("stylesheet", "background-color: white")
-        self.quickexport_dmver_edit._widget.set_property("width", 40)        
+        self.quickexport_dmver_edit._widget.set_property("width", 20)
+        self.quickexport_dmver_toggle_button = ui.create_push_button_widget(_("⟲"))
+        self.quickexport_dmver_toggle_button._widget.set_property("width", 25)
+        
         quickexport_row.add(self.quickexport_text)
         quickexport_row.add(quickexport_dmversion_label)
         quickexport_row.add(self.quickexport_dmver_edit)
+        quickexport_row.add(self.quickexport_dmver_toggle_button)
         quickexport_row.add_spacing(0)
-
+        
         def handle_dmver_changed(text):
-            """ calls the update button state function for each export button
-                and passes the current text in the No field
+            """ This is actually not needed to assign the supplied text in the field
+                to self.quickexport_dmver_edit.text.
+                We just use it to feed back the chosen DM version to the user
+                Note: one can either change DM version manually with the field
+                      or using the toggle button quickexport_dmver_toggle_button
+                If typing other than 3 or 4 we default back to 3
             """
             dmversion=text
-            print(f'dmversion {dmversion}')
-            print(f'dmver {self.quickexport_dmver_edit.text}')
-            #for button in self.button_widgets_list:
-            #    self.update_button_state(button, no=text)
-            ## fields_nr_sub.request_refocus()
-        self.quickexport_dmver_edit.on_editing_finished = handle_dmver_changed        
+            if dmversion != "3" and dmversion != "4":
+                print(f'Incorrect DM version, reverting back to version 3!')
+                self.quickexport_dmver_edit.text = "3"
+                dmversion = "3"
+            print(f'DM version {dmversion}')
+
+        self.quickexport_dmver_edit.on_editing_finished = handle_dmver_changed
+        
+        def quickexport_dmver_toggle_button_clicked():
+            """ on clicking the dmver_toggle_button we change the toggle_button_state to the other
+                DM version and assign the value of toggle_button_state to the quickexport_dmver_edit field.
+                You can still manually type the version in the dmver_edit field and override this. 
+                With the next click on the dmver_toggle_button we default back to DM version 3.
+            """
+            if  self.quickexport_dmver_toggle_button_state == "3":
+                self.quickexport_dmver_toggle_button_state = "4"
+            elif self.quickexport_dmver_toggle_button_state == "4":
+                self.quickexport_dmver_toggle_button_state = "3"
+            else:
+                self.quickexport_dmver_toggle_button_state = "3"
+
+            self.quickexport_dmver_edit._widget.placeholder_text = self.quickexport_dmver_toggle_button_state        
+            self.quickexport_dmver_edit.text = self.quickexport_dmver_toggle_button_state
+            print(f'DM version {self.quickexport_dmver_toggle_button_state}')
+                
+        self.quickexport_dmver_toggle_button.on_clicked = quickexport_dmver_toggle_button_clicked
         
         # # == create label row widget
         # label_row = ui.create_row_widget()
@@ -932,11 +966,16 @@ class PanelSuperSTEMDelegate:
             #filename = "{0}.{1}".format(item.title, writer.extensions[0])
             # we default to writing dm4 files:
             #filename = "{0}.{1}".format(item.title, "dm4")
-            # we take supplied dmversion by quickexport_dmver_edit field, if = "4", else default to "dm3"
+            # we take supplied dmversion by quickexport_dmver_edit field
+            # (or, via dmver_toggle_button)
+            # if = "4", set to 4, else default to "dm3"
             if str(self.quickexport_dmver_edit.text) == "4":
+                dmextension="dm" + str(self.quickexport_dmver_edit.text)
+            elif str(self.quickexport_dmver_edit.text) == "3":
                 dmextension="dm" + str(self.quickexport_dmver_edit.text)
             else:
                 dmextension="dm3"
+                self.quickexport_dmver_edit.text = "3"
                 
             print(f'dmextension {dmextension}')
             filename = "{0}.{1}".format(item.title, dmextension)
