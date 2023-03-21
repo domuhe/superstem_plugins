@@ -138,7 +138,8 @@ class PanelSuperSTEMDelegate:
     Revisions:
 
     20230321; DMH:
-        Re-enabling top dir for Nion Swift output
+        Re-enabling top dir for Nion Swift library and nsproj pairs.
+        Adding "S" to sample no in Initialise New Library automatically.
     20230307; DMH:
         Added a field and toggle button with which to change the DM version of the
         output data files. Default is DM3.
@@ -278,7 +279,7 @@ class PanelSuperSTEMDelegate:
                     [_("Instrument"), _("sstem3"), "instrument"],
                     [_("Task"), _("Project Number (optional)"), "task"],
                     [_("Microscopist"), _("Microscopist <TLA>"), "microscopist"],
-                    [_("Sample"), _("Sample Number <Snnnn>"), "sample"],
+                    [_("Sample"), _("Sample Number <nnnn>"), "sample"],
                     [_("Sample Area"), _("Sample Description"), "sample_area"],
                 ]
 
@@ -622,7 +623,7 @@ class PanelSuperSTEMDelegate:
             date_string = datetime.datetime.now().strftime("%Y_%m_%d")
             #enforce empty string if field has no entry
             microscopist = str(self.__api.library.get_library_value("stem.session.microscopist")).upper() or ""
-            sample = str(self.__api.library.get_library_value("stem.session.sample")) or ""
+            sample = "S" + str(self.__api.library.get_library_value("stem.session.sample")) or ""
             sample_area =  str(self.__api.library.get_library_value("stem.session.sample_area")) or ""
             task =  str(self.__api.library.get_library_value("stem.session.task")) or ""
             if task != "":
