@@ -137,6 +137,8 @@ class PanelSuperSTEMDelegate:
     ==========================================================================
     Revisions:
 
+    20230321; DMH:
+        Re-enabling top dir for Nion Swift output
     20230307; DMH:
         Added a field and toggle button with which to change the DM version of the
         output data files. Default is DM3.
@@ -426,9 +428,10 @@ class PanelSuperSTEMDelegate:
                         # to ensure the application does not close upon closing the last window, force it
                         # to stay open while the window is closed and another reopened.
                         with myapi.application._application.prevent_close():
-                            # we no longer want a separate top directory for each new library:
-                            #workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
-                            workspace_dir = self.data_base_dir_with_year
+                            # we want a top directory for each new library and nsproj pair:
+                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
+                            # no top directory, library and nsproj files all in a flat directory:
+                            # workspace_dir = self.data_base_dir_with_year
                             logging.info("workspace_dir %s %s", workspace_dir, self.data_base_dir_with_year)
                             Cache.db_make_directory_if_needed(workspace_dir)
                             # Nionswift no longer uses *.nslib -> *.nsproj, disable this:
