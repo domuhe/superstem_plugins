@@ -139,7 +139,8 @@ class PanelSuperSTEMDelegate:
 
     20230321; DMH:
         Re-enabling top dir for Nion Swift library and nsproj pairs.
-        Adding "S" to sample no in Initialise New Library automatically.
+        Ensuring that TLA for microscopist and sample no in session meta data
+        and and export directory are upper case.
     20230307; DMH:
         Added a field and toggle button with which to change the DM version of the
         output data files. Default is DM3.
@@ -293,7 +294,7 @@ class PanelSuperSTEMDelegate:
                     library_base_name = "_".join([
                         datetime.datetime.now().strftime("%Y_%m_%d"),
                         field_line_edit_widget_map["microscopist"].text.upper(),
-                        field_line_edit_widget_map["sample"].text,
+                        field_line_edit_widget_map["sample"].text.upper(),
                         field_line_edit_widget_map["sample_area"].text.replace(" ","_")
                         ])
 
@@ -317,6 +318,9 @@ class PanelSuperSTEMDelegate:
                     """
                     # update global session metadata with field values
                     session_metadata_key = "stem.session." + str(field_id)
+                    # ensure that TLA for microscopist and sample no are upper case:
+                    if str(field_id) == "microscopist" or str(field_id) == "sample":
+                        text = text.upper()
                     api.library.set_library_value(session_metadata_key, text)
                     # get library name from current session fields in new library dialog
                     library_name = get_library_name()
@@ -430,7 +434,7 @@ class PanelSuperSTEMDelegate:
                         # to stay open while the window is closed and another reopened.
                         with myapi.application._application.prevent_close():
                             # we want a top directory for each new library and nsproj pair:
-                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text)
+                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text + "_raw")
                             # no top directory, library and nsproj files all in a flat directory:
                             # workspace_dir = self.data_base_dir_with_year
                             logging.info("workspace_dir %s %s", workspace_dir, self.data_base_dir_with_year)
@@ -623,7 +627,7 @@ class PanelSuperSTEMDelegate:
             date_string = datetime.datetime.now().strftime("%Y_%m_%d")
             #enforce empty string if field has no entry
             microscopist = str(self.__api.library.get_library_value("stem.session.microscopist")).upper() or ""
-            sample = "S" + str(self.__api.library.get_library_value("stem.session.sample")) or ""
+            sample = str(self.__api.library.get_library_value("stem.session.sample")) or ""
             sample_area =  str(self.__api.library.get_library_value("stem.session.sample_area")) or ""
             task =  str(self.__api.library.get_library_value("stem.session.task")) or ""
             if task != "":
