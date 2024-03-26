@@ -7,13 +7,19 @@ import pathlib
 import functools
 import typing
 import json
+import subprocess
 
 # local libraries
 from nion.ui import Dialog, UserInterface
 from nion.swift.model import ImportExportManager
 from nion.swift.model import Cache
+from nion.swift.model import Profile
+from nion.swift import DocumentController
+
+
 
 _ = gettext.gettext
+
 
 # global flag to indicate whether "Set Export Folder" has been run at least once
 flag_set_exp_dir = 0
@@ -79,13 +85,14 @@ def get_data_base_dir(superstem_config_file):
         data_base_dir_path = pathlib.Path('/tmp/NewData/sstem/')
     else:
         data_base_dir_path = pathlib.Path(data_base_dir)
-
+    
     return str(data_base_dir_path)
 
 def get_data_base_dir_with_year(superstem_config_file):
     data_base_dir_path = pathlib.Path(get_data_base_dir(superstem_config_file))
     #we no longer want year in our data base dir path:
     #return str(data_base_dir_path.joinpath(str(datetime.datetime.now().year)))
+
     return str(data_base_dir_path)
 
 def get_export_base_dir(superstem_config_file):
@@ -107,6 +114,25 @@ def get_export_base_dir_with_year(superstem_config_file):
     #return str(export_base_dir_path.joinpath(str(datetime.datetime.now().year)))
     return str(export_base_dir_path)
 
+def get_default_project(superstem_config_file):
+    """
+    Reads default project from superstem config file.
+    If there is no entry it writes warning to console.
+    Swift works without it, only the "Finish & Load Default Proj" button will not work correctly.
+    """
+    default_project = get_superstem_settings(superstem_config_file).get('default_project')
+    if default_project is None:
+        logging.info("YOU NEED TO SET A DEFAULT PROJECT IN SUPERSTEM CUSTON JSON FILE!")
+    return str(default_project)
+
+def get_compress_program(superstem_config_file):
+    compress_program = get_superstem_settings(superstem_config_file).get('compress_program')
+    return str(compress_program)
+    
+def get_hashes_program(superstem_config_file):
+    hashes_program = get_superstem_settings(superstem_config_file).get('hashes_program')
+    return str(hashes_program)
+
 def write_superstem_config_file(superstem_config_file: pathlib.Path, superstem_settings):
     """ writes the current superstem settings to the superstem config file """
     conf_file = superstem_config_file
@@ -120,7 +146,8 @@ def write_superstem_config_file(superstem_config_file: pathlib.Path, superstem_s
             logging.info("WARNING - SuperSTEM config file NOT FOUND")
     except Exception as e:
          logging.info("- Exception write_superstem_config_file %s", e)
-
+         
+logging.info("Loaded SuperSTEM Panel")
 
 class PanelSuperSTEMDelegate:
     """
@@ -136,11 +163,21 @@ class PanelSuperSTEMDelegate:
     date in the Export Dir field.
     ==========================================================================
     Revisions:
-
+    
+    20240312; DMH:
+        This version of the plugin creates new feature of "compress last project". At the end of a session one clicks
+        on "Finish and Load Default Project". Afterwards one clicks on "Compress last project" and the plugin
+        runs compress.bat to create compressed archive of raw nionswift library in New_Data, then tests the archive and then
+        runs hashesNew.bat to calculate hashes and filesizes for all files in New_Data and werites them to a hashes file
+        in New_Data, ready to be uploaded to cask via GoodSync.
+        .
+        This now requires a modified switch_project_reference function in Application.py in the main Nion code.
+        This provides a hook to update sstem_last_project_dir and sstem_current_project_dir persistent variables
+        in nionswift_appdata.json whenever a project is loaded or created.
+        We use three new variables in superstem_customisation.json: default_project, compress_program, hashes_program
     20230321; DMH:
         Re-enabling top dir for Nion Swift library and nsproj pairs.
-        Ensuring that TLA for microscopist and sample no in session meta data
-        and and export directory are upper case.
+        Adding "S" to sample no in Initialise New Library automatically.
     20230307; DMH:
         Added a field and toggle button with which to change the DM version of the
         output data files. Default is DM3.
@@ -190,13 +227,15 @@ class PanelSuperSTEMDelegate:
 
         self.__warning_dialog_open = False
         self.__library_dialog_open = False
+        self.__loaddefproj_dialog_open = False
 
         # initial edit status of editable rename fields
         self.have_no = False
         self.have_sub = False
         self.have_fov = False
         self.have_descr = False
-        self.all_good = False
+        self.exp_all_good = False
+        #logging.info("expallgood %s", self.exp_all_good)
         # keep track of export buttons here
         self.button_widgets_list = []
         # get current year
@@ -209,7 +248,136 @@ class PanelSuperSTEMDelegate:
 
         # SuperSTEM config file
         self.superstem_config_file = api.application.configuration_location / pathlib.Path("superstem_customisation.json")
-        logging.info("Using %s for SuperSTEM customisations", self.superstem_config_file)
+ 
+        
+
+#####
+    def show_loaddefproj_dialog(self, title_string, have_ok=True, have_cancel=True):
+
+        api = self.api
+        myapi = self.__api
+        superstem_config_file = self.superstem_config_file
+        #proref = myapi.application._application.profile.get_project_reference(profile.last_project_reference)
+        #proref = myapi.application.__application.profile()
+        #proref = myapi.application.__application.project_refence.title
+        #logging.info("shloadefproj project reference: %s", proref)
+        #myapi.application._application. show_open_project_dialog()
+        # this puts function in the scope of the class LibraryDialog;  - not necessary
+        #get_data_base_dir_with_year_fn = get_data_base_dir_with_year(superstem_config_file)
+      
+
+        class LoadDefProjDialog(Dialog.ActionDialog):
+            """
+            Create a modeless dialog that always stays on top of the UI
+            by default (can be controlled with the parameter 'window_style').
+
+            Parameters:
+            -----------
+            ui : An instance of nion.ui.UserInterface, required.
+            on_accept : callable, optional.
+                This method will be called when the user clicks 'OK'
+            on_reject : callable, optional.
+                This method will be called when the user clicks 'Cancel' or the 'X'-button
+            include_ok : bool, optional
+                Whether to include the 'OK' button.
+            include_cancel : bool, optional
+                Whether to include the 'Cancel' button.
+            window_style : str, optional
+                Pass in 'dialog' here if you want the Dialog to move into the background when clicking outside
+                of it. The default value 'tool' will cause it to always stay on top of Swift.
+            """
+            def __init__(self, ui: UserInterface, *,
+                        on_accept: typing.Optional[typing.Callable[[], None]]=None,
+                        on_reject: typing.Optional[typing.Callable[[], None]]=None,
+                        include_ok: bool=have_ok,
+                        include_cancel: bool=have_cancel,
+                        window_style: typing.Optional[str]=None):
+
+                super().__init__(ui, window_style=window_style)
+
+                self.on_accept = on_accept
+                self.on_reject = on_reject
+
+                defproj_name = get_default_project(superstem_config_file)
+
+                # ==== main column widget ====
+                column = self.ui.create_column_widget()           
+
+                # === Ok Cancel row  ===
+                ok_cancel_row = self.ui.create_row_widget()
+                #ok_cancel_row.add_spacing(1)    
+
+                def on_cancel_clicked():
+                    if self.on_reject:
+                        self.on_reject()
+                    # Return 'True' to tell Swift to close the Dialog
+                    return True
+
+                if include_cancel:
+                    self.add_button('Cancel', on_cancel_clicked)
+                    #ok_cancel_row.add_stretch()
+                    
+                def handle_loaddefproj():
+                    #logging.info("handle_loaddefproj was called")
+                    if defproj_name != "":
+                        # to ensure the application does not close upon closing the last window, force it
+                        # to stay open while the window is closed and another reopened.
+                        with myapi.application._application.prevent_close():
+
+                            if os.path.exists(defproj_name):
+                                logging.info("defproj_name: %s", defproj_name)
+                                # set the current project dir as last project dir in preparation of loading the default project
+                                last_project_dir = myapi.application.document_controllers[0]._document_controller.ui.get_persistent_string('sstem_current_project_dir')
+                                # and write to  presistent config:
+                                #myapi.application.document_controllers[0]._document_controller.ui.set_persistent_string('sstem_last_project_dir', last_project_dir)
+                                #logging.info("last_project_dir %s", last_project_dir)
+                                # get project_reference for default project
+                                #myapi.application._application.create_project_reference(pathlib.Path(defproj_name))
+                                project_reference =  myapi.application._application.profile.open_project(pathlib.Path((defproj_name)))
+                                #logging.info("project_reference in loaddefpro: %s %s", project_reference, project_reference.title)
+                                #  close and load def project
+                                myapi.application._application.switch_project_reference(project_reference)
+                                    
+                                return True
+                            return False
+
+                    else:
+                         logging.info("----missing defproj_name !!!")         
+
+                if include_ok:
+                    # clicking on this button loads default project
+                    # logging.info("clicked on LoadDefProj button")
+                    self.add_button(_("Close Project and Load Default Project"), handle_loaddefproj)                    
+
+
+                # ==== Adding rows to main column ====
+                column.add(ok_cancel_row)
+                #column.add_stretch()
+
+                self.content.add(column)
+
+            def about_to_close(self, geometry: str, state: str) -> None:
+                """
+                Required to properly close the Dialog.
+                """
+                if self.on_reject:
+                    self.on_reject()
+                super().about_to_close(geometry, state)
+
+        # We track open dialogs to ensure that only one dialog can be open at a time
+        if not self.__loaddefproj_dialog_open:
+            self.__loaddefproj_dialog_open = True
+            dc = self.__api.application.document_controllers[0]._document_controller
+            # This function will inform the main panel that the dialog has been closed, so that it will allow
+            # opening a new one
+            def report_dialog_closed():
+                self.__loaddefproj_dialog_open = False
+            # We pass in `report_dialog_closed` so that it gets called when the dialog is closed.
+            # If you want to invoke different actions when the user clicks 'OK' and 'Canclel', you can of course pass
+            # in two different functions for `on_accept` and `on_reject`.
+            LoadDefProjDialog(dc.ui, on_accept=report_dialog_closed, on_reject=report_dialog_closed).show()
+            
+#####
 
 
     def show_library_dialog(self, title_string, have_ok=True, have_cancel=True):
@@ -255,6 +423,8 @@ class PanelSuperSTEMDelegate:
                 self.have_sample = False
                 self.have_sample_area = False
                 self.all_good = False
+                #logging.info("allgood %s", self.all_good)
+
 
                 self.on_accept = on_accept
                 self.on_reject = on_reject
@@ -294,7 +464,7 @@ class PanelSuperSTEMDelegate:
                     library_base_name = "_".join([
                         datetime.datetime.now().strftime("%Y_%m_%d"),
                         field_line_edit_widget_map["microscopist"].text.upper(),
-                        field_line_edit_widget_map["sample"].text.upper(),
+                        "S" + field_line_edit_widget_map["sample"].text,
                         field_line_edit_widget_map["sample_area"].text.replace(" ","_")
                         ])
 
@@ -307,6 +477,7 @@ class PanelSuperSTEMDelegate:
                         library_base_index_str = " " + str(library_base_index)
 
                     library_name = library_base_name + library_base_index_str
+                    
                     return library_name
 
                 # == function to run on each field being changed
@@ -318,9 +489,6 @@ class PanelSuperSTEMDelegate:
                     """
                     # update global session metadata with field values
                     session_metadata_key = "stem.session." + str(field_id)
-                    # ensure that TLA for microscopist and sample no are upper case:
-                    if str(field_id) == "microscopist" or str(field_id) == "sample":
-                        text = text.upper()
                     api.library.set_library_value(session_metadata_key, text)
                     # get library name from current session fields in new library dialog
                     library_name = get_library_name()
@@ -355,6 +523,7 @@ class PanelSuperSTEMDelegate:
                        """
                        if self.all_good:
                            library_name_field.text = library_name.replace(" ", "_")  # replace whitespace
+                          
 
                     myapi.queue_task(update_library_name_field)
                     line_edit_widget.request_refocus()
@@ -434,10 +603,10 @@ class PanelSuperSTEMDelegate:
                         # to stay open while the window is closed and another reopened.
                         with myapi.application._application.prevent_close():
                             # we want a top directory for each new library and nsproj pair:
-                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text + "_raw")
+                            workspace_dir = os.path.join(self.data_base_dir_with_year, library_name_field.text + "_Raw")
+                            
                             # no top directory, library and nsproj files all in a flat directory:
                             # workspace_dir = self.data_base_dir_with_year
-                            logging.info("workspace_dir %s %s", workspace_dir, self.data_base_dir_with_year)
                             Cache.db_make_directory_if_needed(workspace_dir)
                             # Nionswift no longer uses *.nslib -> *.nsproj, disable this:
                             #path = os.path.join(workspace_dir, "Nion Swift Workspace.nslib")
@@ -445,9 +614,14 @@ class PanelSuperSTEMDelegate:
                             #    with open(path, "w") as fp:
                             #        json.dump({}, fp)
                             #if os.path.exists(path):
+                            
                             # create project file if workspace_dir exists
                             if os.path.exists(workspace_dir):
                                 myapi.application._application.create_project_reference(pathlib.Path(workspace_dir), library_name_field.text)
+                                last_workspace_dir = myapi.application.document_controllers[0]._document_controller.ui.get_persistent_string('current_workspace_directory')
+                                myapi.application.document_controllers[0]._document_controller.ui.set_persistent_string('current_workspace_directory', workspace_dir)
+                                myapi.application.document_controllers[0]._document_controller.ui.set_persistent_string('last_workspace_directory', last_workspace_dir)
+                                
                                 return True
                             return False
 
@@ -470,6 +644,7 @@ class PanelSuperSTEMDelegate:
                     ok_cancel_row.add_stretch()
 
                 if include_ok:
+                    # clicking on this button loads new library
                     self.add_button(_("Create New Library and Session"), handle_new)
 
 
@@ -613,6 +788,7 @@ class PanelSuperSTEMDelegate:
         no_buttons_per_row = 4
         # initialise export dir field with empty string
         self.expdir_string = ""
+        self.lastdir_string = ""
 
         # function to construct the export directory string
         def get_export_dir_string():
@@ -627,22 +803,23 @@ class PanelSuperSTEMDelegate:
             date_string = datetime.datetime.now().strftime("%Y_%m_%d")
             #enforce empty string if field has no entry
             microscopist = str(self.__api.library.get_library_value("stem.session.microscopist")).upper() or ""
-            sample = str(self.__api.library.get_library_value("stem.session.sample")) or ""
+            sample = "S" + str(self.__api.library.get_library_value("stem.session.sample")) or ""
             sample_area =  str(self.__api.library.get_library_value("stem.session.sample_area")) or ""
             task =  str(self.__api.library.get_library_value("stem.session.task")) or ""
-            if task != "":
-                prefix_task = "p" + task
-                session_string = "_".join([ microscopist, sample, sample_area, prefix_task ])
-            else:
-                session_string = "_".join([ microscopist, sample, sample_area ])
-            # pathlib "/" method to ;contruct export dir path:
+            # have decided not to include task=project number in folder name
+            #if task != "":
+            #    prefix_task = "p" + task
+            #    session_string = "_".join([ microscopist, sample, sample_area, prefix_task ])
+            #else:
+            session_string = "_".join([ microscopist, sample, sample_area ])
+            ## pathlib "/" method to ;contruct export dir path:
     
             expdir_path = export_base_dir_with_year_path.joinpath(
                     date_string + "_" + session_string)
-            logging.info("Exporting to: %s",expdir_path)
+            logging.info("- Exporting to: %s",expdir_path)
             return str(expdir_path)
 
-        def write_persistent_vars(self):
+        def write_persistent_export_vars(self):
             """ Writes export base directory path, export directory path and
                 chosen export format to config files (superstem and Nion persistent data).
             """
@@ -661,7 +838,7 @@ class PanelSuperSTEMDelegate:
         new_library_button_row.add_spacing(3)
         new_library_label = ui.create_label_widget(_("Library:"))
         self.new_library_button = ui.create_push_button_widget(_("Initialise New Library"))
-        self.new_library_button._widget.set_property("width", 150)
+        self.new_library_button._widget.set_property("width", 200)
         new_library_button_row.add(new_library_label)
         new_library_button_row.add(self.new_library_button)
         new_library_button_row.add_spacing(2)
@@ -675,8 +852,8 @@ class PanelSuperSTEMDelegate:
         update_expdir_row = ui.create_row_widget()
         update_expdir_row.add_spacing(3)
         update_expdir_row_label = ui.create_label_widget("Export to DM:")
-        self.update_expdir_button = ui.create_push_button_widget(_("Set Export Folder"))
-        self.update_expdir_button._widget.set_property("width", 150)
+        self.update_expdir_button = ui.create_push_button_widget(_("Set Export Folder From Session Data"))
+        self.update_expdir_button._widget.set_property("width", 200)
         update_expdir_row.add(update_expdir_row_label)
         update_expdir_row.add_stretch()
         update_expdir_row.add(self.update_expdir_button)
@@ -691,6 +868,7 @@ class PanelSuperSTEMDelegate:
             global flag_set_exp_dir
             expdir_string = get_export_dir_string()
             if expdir_string != "":
+                # logging.info("flag is %s", flag_set_exp_dir)
                 flag_set_exp_dir = 1
             self.expdir_field_edit.text = expdir_string
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_directory', expdir_string)
@@ -706,14 +884,16 @@ class PanelSuperSTEMDelegate:
         self.expdir_field_edit._widget.set_property("width", 320)
         #doesn't work: self.expdir_field_edit.text = "<export dir set from session metadata>"
 
+
         def handle_expdir_field_changed(text):
             """ Handles manual edits to the expdir
                 and writes any manual changes to persistent nion and superstem config
             """
             self.expdir_string = text
-            write_persistent_vars(self)
-            logging.info("Exporting to: %s", self.expdir_string)
+            write_persistent_export_vars(self)
+            logging.info("- Now exporting to: %s", self.expdir_string)
             self.expdir_field_edit.request_refocus()  # not sure what this does
+
 
         self.expdir_field_edit.on_editing_finished = handle_expdir_field_changed
         self.expdir_field_edit.text = self.expdir_string
@@ -750,10 +930,10 @@ class PanelSuperSTEMDelegate:
             """
             dmversion=text
             if dmversion != "3" and dmversion != "4":
-                print(f'Incorrect DM version, reverting back to version 3!')
+                print(f'- Incorrect DM version, reverting back to version 3!')
                 self.quickexport_dmver_edit.text = "3"
                 dmversion = "3"
-            print(f'DM version {dmversion}')
+            print(f'- DM version {dmversion}')
 
         self.quickexport_dmver_edit.on_editing_finished = handle_dmver_changed
         
@@ -772,7 +952,8 @@ class PanelSuperSTEMDelegate:
 
             self.quickexport_dmver_edit._widget.placeholder_text = self.quickexport_dmver_toggle_button_state        
             self.quickexport_dmver_edit.text = self.quickexport_dmver_toggle_button_state
-            print(f'DM version {self.quickexport_dmver_toggle_button_state}')
+            print(f'- DM version {self.quickexport_dmver_toggle_button_state}')
+            #logging.info("quickexport clicked")
                 
         self.quickexport_dmver_toggle_button.on_clicked = quickexport_dmver_toggle_button_clicked
         
@@ -865,6 +1046,94 @@ class PanelSuperSTEMDelegate:
                                                  no_buttons_per_row)
             self.button_column.add(button_row)
 
+        # == create finish and reload button row widget
+        finish_reload_row = ui.create_row_widget()
+        finish_reload_row.add_spacing(3)
+        self.finish_reload_button = ui.create_push_button_widget(_("Finish && Load Default Proj"))
+        self.finish_reload_button._widget.set_property("width", 180)
+        self.finish_reload_compress_button = ui.create_push_button_widget(_("Compress Last Proj"))
+        self.finish_reload_compress_button._widget.set_property("width", 150)
+        finish_reload_row.add_stretch()
+        finish_reload_row.add(self.finish_reload_button)
+        finish_reload_row.add_spacing(2)
+        finish_reload_row.add(self.finish_reload_compress_button)
+        
+        def finish_reload_button_clicked():
+            #logging.info("have clicked on main load def proj button")
+            self.show_loaddefproj_dialog("Finish && Load Default Project", True, True)         
+
+        self.finish_reload_button.on_clicked = finish_reload_button_clicked
+
+        def finish_reload_compress_button_clicked():
+            compress_program = get_compress_program(self.superstem_config_file)
+            # compress_program = r"F:\StaffData\dmuecke\Nionswift-Development\Saved_Data\compress.bat"
+            hashes_program = get_hashes_program(self.superstem_config_file)
+            #hashes_program = r"F:\StaffData\dmuecke\Nionswift-Development\Saved_Data\hashesNew.bat"
+            logging.info("hp %s", hashes_program)
+            last_proj_dir_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('sstem_last_project_dir')
+            last_proj_dir_path, last_proj_name = last_proj_dir_string.rsplit("\\",1)
+            # project name without ".nsproj":
+            last_proj_dir_name = last_proj_name.rsplit(".nsproj",1)[0]
+
+            #logging.info("lpds, lpn %s %s", last_proj_dir_name, last_proj_name)
+            export_base_directory = get_export_base_dir(self.superstem_config_file)
+            output_dir = export_base_directory + "\\" + last_proj_dir_name
+            output_archive_file = output_dir + "\\" + last_proj_dir_name + "_Raw.zip"
+            # MAKE OUTPUT DIR IF NOT EXISTS
+            os.makedirs(output_dir, exist_ok=True)
+  
+
+            #logging.info("of %s", output_file)
+            # enclosing command line parameters with quotes
+            # compress bat file, compressed archive name, last project, hashes bat file, export base dir
+            compress_command = " \"" + compress_program + "\" \"" + output_archive_file  + "\"  \"" + last_proj_dir_path + "\"  \"" + hashes_program + "\" \"" + export_base_directory + "\" && echo DONE || echo ERROR Something is wrong"
+
+            logging.info("- Running now: %s", compress_program)
+            p = subprocess.Popen(compress_command,shell=True)
+            # ... do other stuff while subprocess is running
+            #p.terminate()
+            
+        self.finish_reload_compress_button.on_clicked = finish_reload_compress_button_clicked
+        
+        # == create last project row widget
+        lastproj_row = ui.create_row_widget()
+        lastproj_row.add_spacing(3)
+        lastproj_row_label = ui.create_label_widget("Last Proj:")
+        lastproj_row.add(lastproj_row_label)
+        lastproj_row.add_stretch()
+                
+        lastproj_dir_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('sstem_last_project_dir')
+        logging.info("- Last Project: %s", lastproj_dir_string)
+        currentproj_dir_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('sstem_current_project_dir')
+        logging.info("- Current Project: %s", currentproj_dir_string)
+
+        self.lastproj_field_edit = ui.create_line_edit_widget("h")
+        self.lastproj_field_edit._widget.set_property("stylesheet", "background-color: white")
+        self.lastproj_field_edit._widget.set_property("width", 270)
+
+        def write_persistent_lastproj_vars(self):
+            """ Writes export base directory path, export directory path and
+                chosen export format to config files (superstem and Nion persistent data).
+            """
+            self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('sstem_last_project_dir', self.lastproj_string)
+            
+        def handle_lastproj_field_changed(text):
+            """ Handles manual edits to the lastproj field
+                and writes any manual changes to persistent nion and superstem config
+            """
+            self.lastproj_string = text
+            write_persistent_lastproj_vars(self)
+            logging.info("- Last Project is now : %s", self.lastproj_string)
+            self.exp_all_good = False
+            flag_set_exp_dir = 0
+            self.lastproj_field_edit.request_refocus()  # not sure what this does
+
+        self.lastproj_field_edit.on_editing_finished = handle_lastproj_field_changed
+        self.lastproj_field_edit.text = lastproj_dir_string
+        lastproj_row.add(self.lastproj_field_edit)
+        lastproj_row.add_spacing(2)
+        lastproj_row.add_stretch()
+            
         # == add the row widgets to the column widget
         column.add_spacing(8)
         column.add(new_library_button_row)
@@ -880,8 +1149,10 @@ class PanelSuperSTEMDelegate:
         column.add_spacing(3)
         column.add(self.button_column)
         column.add_spacing(5)
-        column.add_stretch()
-
+        column.add(lastproj_row)
+        column.add_spacing(3)
+        column.add(finish_reload_row)
+        
         # default state of export buttons:
         for button in self.button_widgets_list:
             # button._widget.enabled = False
@@ -917,23 +1188,23 @@ class PanelSuperSTEMDelegate:
             self.have_descr = False
 
         # only if related status booleans of required fields (No, FOV and Description)
-        # are all True and exp_dir_path is defined (i.e. Set Export Folder has run at
+        # are all True and exp_dir_path is defined (i.e. SetExport Folder has run at
         # least once) can we set all good to go
         #logging.info("flag_set_exp_dir %s", str(flag_set_exp_dir))
         if self.have_no and self.have_fov and self.have_descr and flag_set_exp_dir == 1:
-            self.all_good = True
+            self.exp_all_good = True
         else:
-            self.all_good = False
+            self.exp_all_good = False
 
  
-
         def update():
             """ enables/disables button widget
             """
-            if self.all_good:
+            if self.exp_all_good:
                 button._widget.enabled = True
             else:
                 button._widget.enabled = False
+            #logging.info("update button status %s %s", self.exp_all_good, button._widget.enabled)
 
         self.__api.queue_task(update)
 
@@ -968,7 +1239,10 @@ class PanelSuperSTEMDelegate:
                           + postfix)
             # get latest export directory from persistent config
             directory_string = self.__api.application.document_controllers[0]._document_controller.ui.get_persistent_string('export_directory')
-            logging.info("Exporting to %s ", directory_string)
+            if len(directory_string) == 0:
+                logging.info("- Error!  Export directory variable empty!")
+            else:
+                logging.info("- Exporting to %s ", directory_string)
 
             ## filename is quick export concatenation plus dm3 or dm4 extension            
             #filename = "{0}.{1}".format(item.title, writer.extensions[0])
@@ -985,19 +1259,20 @@ class PanelSuperSTEMDelegate:
                 dmextension="dm3"
                 self.quickexport_dmver_edit.text = "3"
                 
-            print(f'dmextension {dmextension}')
+            print(f'- dmextension {dmextension}')
             filename = "{0}.{1}".format(item.title, dmextension)
             export_path = pathlib.Path(directory_string).joinpath(filename)
 
             if not pathlib.Path.is_dir(export_path.parent):
+                logging.info("- Creating Export Dir")
                 export_path.parent.mkdir(parents=True)  # mkdir -p
             else:
-                #logging.info("- Export Directory exists")
+                logging.info("- Export Directory exists")
                 pass
 
             if not pathlib.Path.is_file(export_path):
-                ImportExportManager.ImportExportManager().write_display_item_with_writer(writer, item, export_path)
-                logging.info("- %s", export_path.name)
+               ImportExportManager.ImportExportManager().write_display_item_with_writer(writer, item, export_path)
+               logging.info("- %s", export_path.name)
             else:
                 # launch popup dialog if filename already exists
                 logging.info("----- COULD NOT EXPORT - FILE EXISTS !!! -----")
@@ -1066,3 +1341,4 @@ class PanelSuperSTEMExtension(object):
         # is not strictly necessary since the references will be deleted naturally when this object is deleted.
         self.__panel_ref.close()
         self.__panel_ref = None
+

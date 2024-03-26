@@ -1,6 +1,10 @@
 {
-    "data_base_directory": "E:/Active Swift Libraries",
+    "data_base_directory": "F:/Active Swift Libraries",
     "export_base_directory": "D:/New_Data",
+    "default_project": "F:/Active Swift Libraries/DefaultProject.nsproj",
+    "compress_program": "D:/Dorothea/work/git/superstem_plugins-master/nionswift_plugin/superstem/compress.bat",
+    "hashes_program": "D:/Dorothea/work/git/superstem_plugins-master/nionswift_plugin/superstem/hashesNew.bat",
     "superstem_site": "SuperSTEM",
     "superstem_instrument": "sstem3"
 }
+
