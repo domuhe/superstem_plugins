@@ -163,12 +163,17 @@ class PanelSuperSTEMDelegate:
     date in the Export Dir field.
     ==========================================================================
     Revisions:
-    
-    20240312; DMH:
+     20240402; DMH:
+        Added a new checkbox RenameOnly that allows to rename any selected data item using the fields from the
+        quick export, but without actually exporting to New_Data. When done with the session one can then manually
+        select all data items by Edit->Select All and then export them all via File->Export (only select "include Title").
+        This pushes possible time-consuming data export to the end of the session.
+        When RenameOnly is checked then one doesn't have to set an export dir.
+     20240312; DMH:
         This version of the plugin creates new feature of "compress last project". At the end of a session one clicks
         on "Finish and Load Default Project". Afterwards one clicks on "Compress last project" and the plugin
-        runs compress.bat to create compressed archive of raw nionswift library in New_Data, then tests the archive and then
-        runs hashesNew.bat to calculate hashes and filesizes for all files in New_Data and werites them to a hashes file
+        runs compress.bat to create a compressed archive of the raw nionswift library in New_Data, then tests the archive and then
+        runs hashesNew.bat to calculate hashes and filesizes for all files in New_Data and writes them to a hashes file
         in New_Data, ready to be uploaded to cask via GoodSync.
         .
         This now requires a modified switch_project_reference function in Application.py in the main Nion code.
@@ -242,6 +247,8 @@ class PanelSuperSTEMDelegate:
         self.year = datetime.datetime.now().year
         # dmver toggle button
         self.quickexport_dmver_toggle_button_state="3"
+        # rename only or rename and export boolean
+        self.renameonly = False
         
         # we only export to DM
         self.io_handler_id = "dm-io-handler"
@@ -305,7 +312,11 @@ class PanelSuperSTEMDelegate:
 
                 # === Ok Cancel row  ===
                 ok_cancel_row = self.ui.create_row_widget()
-                #ok_cancel_row.add_spacing(1)    
+                ok_cancel_row.add_spacing(10)    
+                popup_label = self.ui.create_label_widget("Close the current project and load the default project? ")
+                ok_cancel_row.add(popup_label)
+
+
 
                 def on_cancel_clicked():
                     if self.on_reject:
@@ -347,7 +358,8 @@ class PanelSuperSTEMDelegate:
                 if include_ok:
                     # clicking on this button loads default project
                     # logging.info("clicked on LoadDefProj button")
-                    self.add_button(_("Close Project and Load Default Project"), handle_loaddefproj)                    
+                    self.add_button(_("Yes"), handle_loaddefproj)      
+                    
 
 
                 # ==== Adding rows to main column ====
@@ -836,7 +848,7 @@ class PanelSuperSTEMDelegate:
         # == create initialise new library button row
         new_library_button_row = ui.create_row_widget()
         new_library_button_row.add_spacing(3)
-        new_library_label = ui.create_label_widget(_("Library:"))
+        new_library_label = ui.create_label_widget(_("<b>Library:</b>"))
         self.new_library_button = ui.create_push_button_widget(_("Initialise New Library"))
         self.new_library_button._widget.set_property("width", 200)
         new_library_button_row.add(new_library_label)
@@ -851,7 +863,7 @@ class PanelSuperSTEMDelegate:
         # == create update export dir button row widget
         update_expdir_row = ui.create_row_widget()
         update_expdir_row.add_spacing(3)
-        update_expdir_row_label = ui.create_label_widget("Export to DM:")
+        update_expdir_row_label = ui.create_label_widget("<b>Export to DM:</b>")
         self.update_expdir_button = ui.create_push_button_widget(_("Set Export Folder From Session Data"))
         self.update_expdir_button._widget.set_property("width", 200)
         update_expdir_row.add(update_expdir_row_label)
@@ -873,6 +885,7 @@ class PanelSuperSTEMDelegate:
             self.expdir_field_edit.text = expdir_string
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_directory', expdir_string)
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('export_filter', 'DigitalMicrograph Files files (*.dm3 *.dm4)')
+           
 
         self.update_expdir_button.on_clicked = update_expdir_button_clicked
 
@@ -881,7 +894,7 @@ class PanelSuperSTEMDelegate:
         expdir_row.add_spacing(3)
         self.expdir_field_edit = ui.create_line_edit_widget("i")
         self.expdir_field_edit._widget.set_property("stylesheet", "background-color: white")
-        self.expdir_field_edit._widget.set_property("width", 320)
+        self.expdir_field_edit._widget.set_property("width", 330)
         #doesn't work: self.expdir_field_edit.text = "<export dir set from session metadata>"
 
 
@@ -900,13 +913,35 @@ class PanelSuperSTEMDelegate:
         expdir_row.add(self.expdir_field_edit)
         expdir_row.add_spacing(2)
         expdir_row.add_stretch()
-
+ 
+                
         # == create quickexport label row widget
         quickexport_row = ui.create_row_widget()
         quickexport_row.add_spacing(2)
-        self.quickexport_text =  ui.create_label_widget(_("Quick DM Export: <sup> (\"Sub\" optional)</sup>"))
-        self.quickexport_text._widget.set_property("width", 220)
-        quickexport_dmversion_label = ui.create_label_widget(_("DM Version:"))
+        self.quickexport_text =  ui.create_label_widget(_("<b>Quick Export:</b> <sup> (\"Sub\" optional)</sup>"))
+        self.quickexport_text._widget.set_property("width", 145)
+        ## checkbox
+        self.quickexport_rename_check = ui.create_check_box_widget(_("RenameOnly"))
+        #self.quickexport_rename_check.checked = "RENAME"
+        #def mychecked_changed(option_id_: str, checked: bool) -> None:
+        #        thevalue=str(checked)
+        #        logging.info("mychecked_changed %s", thevalue)
+        #self.quickexport_rename_check.on_checked_changed = functools.partial(mychecked_changed, "RENAME")
+        def checked_changed(checked: bool) -> None:
+            thevalue=str(checked)
+            self.renameonly=checked
+            # trigger status update of export buttons when changing check status of renameonly:
+            for button in self.button_widgets_list:
+                # button._widget.enabled = False
+                self.update_button_state(button)
+
+            
+
+            logging.info("- Quick Export Rename Only: %s", str(self.renameonly))
+        self.quickexport_rename_check.on_checked_changed = checked_changed
+        self.quickexport_rename_check._widget.set_property("width", 95)
+        ##
+        quickexport_dmversion_label = ui.create_label_widget(_("DM Ver:"))
         self.quickexport_dmver_edit = ui.create_line_edit_widget()
         self.quickexport_dmver_edit._widget.placeholder_text = self.quickexport_dmver_toggle_button_state
         self.quickexport_dmver_edit._widget.set_property("stylesheet", "background-color: white")
@@ -915,6 +950,7 @@ class PanelSuperSTEMDelegate:
         self.quickexport_dmver_toggle_button._widget.set_property("width", 25)
         
         quickexport_row.add(self.quickexport_text)
+        quickexport_row.add(self.quickexport_rename_check)
         quickexport_row.add(quickexport_dmversion_label)
         quickexport_row.add(self.quickexport_dmver_edit)
         quickexport_row.add(self.quickexport_dmver_toggle_button)
@@ -1098,7 +1134,7 @@ class PanelSuperSTEMDelegate:
         # == create last project row widget
         lastproj_row = ui.create_row_widget()
         lastproj_row.add_spacing(3)
-        lastproj_row_label = ui.create_label_widget("Last Proj:")
+        lastproj_row_label = ui.create_label_widget("<b>Last Proj:</b>")
         lastproj_row.add(lastproj_row_label)
         lastproj_row.add_stretch()
                 
@@ -1109,7 +1145,7 @@ class PanelSuperSTEMDelegate:
 
         self.lastproj_field_edit = ui.create_line_edit_widget("h")
         self.lastproj_field_edit._widget.set_property("stylesheet", "background-color: white")
-        self.lastproj_field_edit._widget.set_property("width", 270)
+        self.lastproj_field_edit._widget.set_property("width", 277)
 
         def write_persistent_lastproj_vars(self):
             """ Writes export base directory path, export directory path and
@@ -1152,6 +1188,7 @@ class PanelSuperSTEMDelegate:
         column.add(lastproj_row)
         column.add_spacing(3)
         column.add(finish_reload_row)
+        column.add_spacing(2)
         
         # default state of export buttons:
         for button in self.button_widgets_list:
@@ -1186,12 +1223,17 @@ class PanelSuperSTEMDelegate:
             self.have_descr = True
         elif 'descr' in kwargs and kwargs['descr'] == "":
             self.have_descr = False
+        else:
+            pass
 
         # only if related status booleans of required fields (No, FOV and Description)
         # are all True and exp_dir_path is defined (i.e. SetExport Folder has run at
-        # least once) can we set all good to go
+        # least once) can we set all good to go,
+        # one exception, if we have checked renameonly, then flag_set_exp_dir doesn't have to be set
         #logging.info("flag_set_exp_dir %s", str(flag_set_exp_dir))
         if self.have_no and self.have_fov and self.have_descr and flag_set_exp_dir == 1:
+            self.exp_all_good = True
+        elif self.renameonly == True and flag_set_exp_dir == 0 and self.have_no and self.have_fov and self.have_descr:
             self.exp_all_good = True
         else:
             self.exp_all_good = False
@@ -1259,20 +1301,25 @@ class PanelSuperSTEMDelegate:
                 dmextension="dm3"
                 self.quickexport_dmver_edit.text = "3"
                 
-            print(f'- dmextension {dmextension}')
             filename = "{0}.{1}".format(item.title, dmextension)
             export_path = pathlib.Path(directory_string).joinpath(filename)
 
             if not pathlib.Path.is_dir(export_path.parent):
-                logging.info("- Creating Export Dir")
+                #logging.info("- Creating Export Dir")
                 export_path.parent.mkdir(parents=True)  # mkdir -p
             else:
-                logging.info("- Export Directory exists")
+                #logging.info("- Export Directory exists")
                 pass
 
             if not pathlib.Path.is_file(export_path):
-               ImportExportManager.ImportExportManager().write_display_item_with_writer(writer, item, export_path)
-               logging.info("- %s", export_path.name)
+                if self.renameonly:
+                   mydata_item = item    
+                   #logging.info(" data item %s", mydata_item.title) 
+                   mydata_item.title = filename
+                   logging.info("- Renamed data item to %s", mydata_item.title) 
+                else:
+                   ImportExportManager.ImportExportManager().write_display_item_with_writer(writer, item, export_path)
+                   logging.info("- Exported to %s", export_path.name)
             else:
                 # launch popup dialog if filename already exists
                 logging.info("----- COULD NOT EXPORT - FILE EXISTS !!! -----")
@@ -1341,4 +1388,3 @@ class PanelSuperSTEMExtension(object):
         # is not strictly necessary since the references will be deleted naturally when this object is deleted.
         self.__panel_ref.close()
         self.__panel_ref = None
-
